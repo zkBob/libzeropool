@@ -1,25 +1,24 @@
-use libzeropool::{POOL_PARAMS, circuit::tx::{CTransferPub, CTransferSec, c_transfer},
+
+use fawkes_crypto::backend::bellman_groth16::{setup::setup_with_params, Parameters};
+use fawkes_crypto_phase2::parameters::MPCParameters;
+use libzeropool::{
+    circuit::tx::{c_transfer, CTransferPub, CTransferSec},
     fawkes_crypto::{
-        circuit::{
-            cs::{CS, DebugCS}
-        }, 
+        backend::bellman_groth16::{engines::Bn256, prover, verifier},
+        circuit::cs::{DebugCS, CS},
         core::signal::Signal,
         rand::thread_rng,
-        backend::bellman_groth16::{
-            engines::Bn256,
-            setup::setup,
-            prover,
-            verifier
-        }
-    }, 
+    },
+    POOL_PARAMS,
 };
 
 use libzeropool::fawkes_crypto::engines::bn256::Fr;
-use std::time::Instant;
-    
+use std::{
+    fs::{self, File},
+    time::Instant,
+};
 
 use libzeropool::helpers::sample_data::State;
-
 
 #[test]
 fn test_circuit_tx_fullfill() {
@@ -31,12 +30,11 @@ fn test_circuit_tx_fullfill() {
     let ref p = CTransferPub::alloc(cs, Some(&p));
     let ref s = CTransferSec::alloc(cs, Some(&s));
 
-    
     let mut num_gates = cs.borrow().num_gates();
     let start = Instant::now();
     c_transfer(p, s, &*POOL_PARAMS);
     let duration = start.elapsed();
-    num_gates=cs.borrow().num_gates()-num_gates;
+    num_gates = cs.borrow().num_gates() - num_gates;
 
     println!("tx gates = {}", num_gates);
     println!("Time elapsed in c_transfer() is: {:?}", duration);
@@ -45,7 +43,7 @@ fn test_circuit_tx_fullfill() {
 
 #[test]
 fn test_circuit_tx_setup_and_prove() {
-    fn circuit<C:CS<Fr=Fr>>(public: CTransferPub<C>, secret: CTransferSec<C>) {
+    fn circuit<C: CS<Fr = Fr>>(public: CTransferPub<C>, secret: CTransferSec<C>) {
         c_transfer(&public, &secret, &*POOL_PARAMS);
     }
 
@@ -54,7 +52,18 @@ fn test_circuit_tx_setup_and_prove() {
     let (public, secret) = state.random_sample_transfer(&mut rng, &*POOL_PARAMS);
 
     let ts_setup = Instant::now();
-    let params = setup::<Bn256, _, _, _>(circuit);
+
+    let params_path = std::env::var("PARAMS_PATH").unwrap_or(String::from("params"));
+
+    let params_file = File::open(params_path).unwrap();
+
+    let bp = MPCParameters::read(params_file, false, false)
+        .unwrap()
+        .get_params()
+        .to_owned();
+
+    let params: Parameters<Bn256> = setup_with_params(circuit, bp);
+
     let duration = ts_setup.elapsed();
     println!("Time elapsed in setup() is: {:?}", duration);
 
@@ -70,4 +79,3 @@ fn test_circuit_tx_setup_and_prove() {
 
     assert!(res, "Verifier result should be true");
 }
-
