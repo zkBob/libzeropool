@@ -71,3 +71,29 @@ fn test_circuit_tx_setup_and_prove() {
     assert!(res, "Verifier result should be true");
 }
 
+#[test]
+fn load_params_and_prove() {
+    fn circuit<C: CS<Fr = Fr>>(public: CTransferPub<C>, secret: CTransferSec<C>) {
+        c_transfer(&public, &secret, &*POOL_PARAMS);
+    }
+
+    let mut rng = thread_rng();
+    let state = State::random_sample_state(&mut rng, &*POOL_PARAMS);
+    let (public, secret) = state.random_sample_transfer(&mut rng, &*POOL_PARAMS);
+
+    let params_filename = std::env::var("PARAMS_PATH").unwrap_or(String::from("../phase2-bn254/params"));
+    let should_filter_points_at_infinity = true;
+
+    let params = fawkes_crypto::backend::bellman_groth16::Parameters::<Bn256>::read(
+        &mut std::fs::read(params_filename).unwrap()[..].as_ref(),
+        should_filter_points_at_infinity,
+        true,
+    )
+    .unwrap();
+
+    let (inputs, snark_proof) = prover::prove(&params, &public, &secret, circuit);
+
+    let res = verifier::verify(&params.get_vk(), &snark_proof, &inputs);
+
+    assert!(res, "Verifier result should be true");
+}
