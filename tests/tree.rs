@@ -8,10 +8,16 @@ use libzeropool::{POOL_PARAMS, circuit::tree::{CTreePub, CTreeSec, tree_update},
         }, 
         core::signal::Signal,
         rand::thread_rng,
+        backend::bellman_groth16::{
+            engines::Bn256,
+            prover,
+            verifier,
+            Parameters,
+        }
     }, 
 };
 
-
+use libzeropool::fawkes_crypto::engines::bn256::Fr;
 use std::time::Instant;
     
 
@@ -90,3 +96,39 @@ fn test_circuit_tx_fullfill_empty(){
     println!("Time elapsed in c_transfer() is: {:?}", duration);
 }
 
+#[test]
+fn load_params_and_prove() {
+    fn circuit<C:CS<Fr=Fr>>(public: CTreePub<C>, secret: CTreeSec<C>) {
+        tree_update(&public, &secret, &*POOL_PARAMS);
+    }
+
+    let mut rng = thread_rng();
+    let mut state = HashTreeState::new(&*POOL_PARAMS);
+
+    let root_before = state.root();
+    let proof_filled = state.merkle_proof(0);
+    let proof_free = state.merkle_proof(0);
+    let prev_leaf = Num::ZERO;
+    state.push(rng.gen(), &*POOL_PARAMS);
+    let root_after = state.root();
+    let leaf = state.hashes[0].last().unwrap().clone();
+     
+    let public = TreePub {root_before, root_after, leaf};
+    let secret = TreeSec {proof_filled, proof_free, prev_leaf};
+
+    let params_filename = std::env::var("PARAMS_PATH").unwrap_or(String::from("../phase2-bn254/params"));
+    let should_filter_points_at_infinity = true;
+
+    let params = Parameters::<Bn256>::read(
+        &mut std::fs::read(params_filename).unwrap()[..].as_ref(),
+        should_filter_points_at_infinity,
+        true,
+    )
+    .unwrap();
+
+    let (inputs, snark_proof) = prover::prove(&params, &public, &secret, circuit);
+
+    let res = verifier::verify(&params.get_vk(), &snark_proof, &inputs);
+
+    assert!(res, "Verifier result should be true");
+}

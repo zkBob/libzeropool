@@ -9,7 +9,8 @@ use libzeropool::{POOL_PARAMS, circuit::tx::{CTransferPub, CTransferSec, c_trans
             engines::Bn256,
             setup::setup,
             prover,
-            verifier
+            verifier,
+            Parameters,
         }
     }, 
 };
@@ -84,7 +85,7 @@ fn load_params_and_prove() {
     let params_filename = std::env::var("PARAMS_PATH").unwrap_or(String::from("../phase2-bn254/params"));
     let should_filter_points_at_infinity = true;
 
-    let params = fawkes_crypto::backend::bellman_groth16::Parameters::<Bn256>::read(
+    let params = Parameters::<Bn256>::read(
         &mut std::fs::read(params_filename).unwrap()[..].as_ref(),
         should_filter_points_at_infinity,
         true,
