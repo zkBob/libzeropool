@@ -32,6 +32,8 @@ pub struct TransferPub<Fr:PrimeField> {
     pub out_commit: Num<Fr>,
     pub delta: Num<Fr>,
     pub memo: Num<Fr>,
+    pub current_day: Num<Fr>,
+    pub daily_limit: Num<Fr>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

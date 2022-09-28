@@ -31,13 +31,14 @@ lazy_static! {
         let poseidon_params_t_4:PoseidonParams<Fr> = serde_json::from_str(include_str!("../res/poseidon_params_t_4.json")).unwrap();
         let poseidon_params_t_5:PoseidonParams<Fr> = serde_json::from_str(include_str!("../res/poseidon_params_t_5.json")).unwrap();
         let poseidon_params_t_6:PoseidonParams<Fr> = serde_json::from_str(include_str!("../res/poseidon_params_t_6.json")).unwrap();
+        let poseidon_params_t_8:PoseidonParams<Fr> = serde_json::from_str(include_str!("../res/poseidon_params_t_8.json")).unwrap();
         
         PoolBN256 {
             jubjub: JubJubBN256::new(),
             hash: poseidon_params_t_2.clone(),
             compress: poseidon_params_t_3,
             note: poseidon_params_t_5,
-            account: poseidon_params_t_6.clone(),
+            account: poseidon_params_t_8.clone(),
             eddsa: poseidon_params_t_4.clone(),
             sponge: poseidon_params_t_6,
             nullifier_intermediate: poseidon_params_t_4

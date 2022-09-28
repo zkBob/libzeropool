@@ -13,11 +13,21 @@ pub struct Account<Fr:PrimeField> {
     pub i: BoundedNum<Fr, { constants::HEIGHT }>,
     pub b: BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }>,
     pub e: BoundedNum<Fr, { constants::ENERGY_SIZE_BITS }>,
+    pub last_action_day: BoundedNum<Fr, { constants::DAY_SIZE }>,
+    pub today_turnover_used: BoundedNum<Fr, { constants::TURNOVER_SIZE }>,
 }
 
 impl<Fr:PrimeField> Account<Fr> {
     pub fn hash<P:PoolParams<Fr=Fr>>(&self, params:&P) -> Num<Fr> {
-        poseidon(&[self.d.to_num(), self.p_d, self.i.to_num(), self.b.to_num(), self.e.to_num()], params.account())
+        poseidon(&[
+            self.d.to_num(), 
+            self.p_d, 
+            self.i.to_num(), 
+            self.b.to_num(), 
+            self.e.to_num(),
+            self.last_action_day.to_num(),
+            self.today_turnover_used.to_num(),    
+        ], params.account())
     }
 }
 

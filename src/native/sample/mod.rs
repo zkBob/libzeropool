@@ -27,6 +27,8 @@ impl<Fr:PrimeField> Account<Fr>
             i: rng.gen(),
             b,
             e,
+            last_action_day: BoundedNum::new(Num::ZERO),
+            today_turnover_used: BoundedNum::new(Num::ZERO),
         }
     }
 }

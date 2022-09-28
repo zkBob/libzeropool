@@ -8,7 +8,7 @@ use fawkes_crypto::{circuit::{
 }, ff_uint::PrimeFieldParams};
 use fawkes_crypto::core::{signal::Signal, sizedvec::SizedVec,};
 use fawkes_crypto::ff_uint::{Num, NumRepr};
-use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}};
+use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::{DAY_SIZE, TURNOVER_SIZE}};
 use crate::native::tx::{TransferPub, TransferSec, Tx};
 use crate::native::params::PoolParams;
 use crate::constants::{HEIGHT, IN, OUT, BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, POOLID_SIZE_BITS};
@@ -22,6 +22,8 @@ pub struct CTransferPub<C:CS> {
     pub out_commit: CNum<C>,
     pub delta: CNum<C>, // int64 token delta, int64 energy delta, uint32 blocknumber
     pub memo: CNum<C>,
+    pub current_day: CNum<C>,
+    pub daily_limit: CNum<C>,
 }
 
 #[derive(Clone, Signal)]
@@ -145,6 +147,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let out_hash = [[out_account_hash].as_ref(), out_note_hash.as_slice()].concat();
 
     //assert out notes are unique or zero
+    let mut out_note_sum: CNum<C> = p.derive_const(&Num::ZERO);
     let mut t:CNum<C> = p.derive_const(&Num::ZERO);
     let mut out_note_zero_num:CNum<C> = p.derive_const(&Num::ZERO);
     for i in 0..OUT {
@@ -152,6 +155,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         for j in i+1..OUT {
             t+=(&out_note_hash[i]-&out_note_hash[j]).is_zero().as_num();
         }
+        out_note_sum += s.tx.output.1[i].b.as_num();
     }
     t -= &out_note_zero_num*(&out_note_zero_num-Num::ONE)/Num::from(2u64);
     t.assert_zero();
@@ -159,6 +163,27 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     //check output     
     let out_ch = c_out_commitment_hash(&out_hash, params);
     (&out_ch - &p.out_commit).assert_zero();
+
+    // Check daily limits
+    {
+        let in_account = &s.tx.input.0;
+        let out_account = &s.tx.output.0;
+        let is_new_day = c_comp(&p.current_day, &in_account.last_action_day.as_num(), DAY_SIZE);
+
+        // Check that current day >= last_action_day
+        (&is_new_day | p.current_day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
+
+        // TODO: add deposits and withdrawals?
+        let turnover = out_note_sum;
+        let turnover = turnover.switch(&is_new_day, &(in_account.today_turnover_used.as_num() + &turnover));
+
+        // Check turnover limit
+        c_comp(&turnover, &p.daily_limit, TURNOVER_SIZE).assert_const(&false);    
+        // Check output account turnover
+        out_account.today_turnover_used.as_num().is_eq(&turnover).assert_const(&true);
+        // Check output account last_action_day
+        out_account.last_action_day.as_num().is_eq(&p.current_day).assert_const(&true);
+    }
 
 
     //build decryption key

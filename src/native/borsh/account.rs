@@ -15,7 +15,9 @@ impl<Fr:PrimeField> BorshSerialize for Account<Fr> {
         self.p_d.serialize(writer)?;
         self.i.serialize(writer)?;
         self.b.serialize(writer)?;
-        self.e.serialize(writer)
+        self.e.serialize(writer)?;
+        self.last_action_day.serialize(writer)?;
+        self.today_turnover_used.serialize(writer)
     }
 }
 
@@ -26,7 +28,9 @@ impl<Fr:PrimeField> BorshDeserialize for Account<Fr> {
             p_d: BorshDeserialize::deserialize(buf)?,
             i: BorshDeserialize::deserialize(buf)?,
             b: BorshDeserialize::deserialize(buf)?,
-            e: BorshDeserialize::deserialize(buf)?
+            e: BorshDeserialize::deserialize(buf)?,
+            last_action_day: BorshDeserialize::deserialize(buf)?,
+            today_turnover_used: BorshDeserialize::deserialize(buf)?,
         })  
     }
 }

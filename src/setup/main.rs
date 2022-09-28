@@ -9,7 +9,7 @@ use libzeropool::{
 use core::panic;
 use std::{fs::File, io::Write};
 
-use fawkes_crypto::engines::bn256::Fr;
+use fawkes_crypto::{engines::bn256::Fr, native::poseidon::PoseidonParams};
 use fawkes_crypto::backend::bellman_groth16::engines::Bn256;
 use fawkes_crypto::ff_uint::Num;
 use fawkes_crypto::backend::bellman_groth16::{verifier::{VK, verify}, prover::{Proof, prove}, setup::setup, Parameters};
@@ -37,6 +37,8 @@ enum SubCommand {
     GenerateVerifier(GenerateVerifierOpts),
     /// Generate test object
     GenerateTestData(GenerateTestDataOpts),
+    /// Generate poseidon params
+    GeneratePoseidonParams(GeneratePoseidonParamsOpts)
 }
 
 /// A subcommand for generating a SNARK proof
@@ -115,6 +117,18 @@ struct GenerateTestDataOpts {
     /// Input object JSON file
     #[clap(short = "o", long = "object")]
     object: Option<String>
+}
+
+#[derive(Clap)]
+struct GeneratePoseidonParamsOpts {
+    #[clap(short = "t", long = "t")]
+    t: usize,
+    #[clap(short = "f", long = "f")]
+    f: usize,
+    #[clap(short = "p", long = "p")]
+    p: usize,
+    #[clap(short = "o", long = "output")]
+    output: String,
 }
 
 fn tree_circuit<C:CS<Fr=Fr>>(public: CTreePub<C>, secret: CTreeSec<C>) {
@@ -224,6 +238,12 @@ fn cli_prove(o:ProveOpts) {
     println!("Proved")
 }
 
+fn cli_generate_poseidon_params(o: GeneratePoseidonParamsOpts) {
+    let params = PoseidonParams::<Fr>::new(o.t, o.f, o.p);
+    let mut file = File::create(o.output).unwrap();
+    file.write_all(serde_json::to_string(&params).unwrap().as_bytes()).unwrap();
+}
+
 
 pub fn main() {
     let opts: Opts = Opts::parse();
@@ -232,6 +252,7 @@ pub fn main() {
         SubCommand::Verify(o) => cli_verify(o),
         SubCommand::Setup(o) => cli_setup(o),
         SubCommand::GenerateVerifier(o) => cli_generate_verifier(o),
-        SubCommand::GenerateTestData(o) => cli_generate_test_data(o)
+        SubCommand::GenerateTestData(o) => cli_generate_test_data(o),
+        SubCommand::GeneratePoseidonParams(o) => cli_generate_poseidon_params(o)
     }    
 }

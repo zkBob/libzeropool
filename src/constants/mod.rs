@@ -17,6 +17,8 @@ pub const POOLID_SIZE_BITS: usize = 24;
 
 pub const POLY_1305_TAG_SIZE: usize = 16;
 pub const U256_SIZE:usize = 32;
+pub const DAY_SIZE: usize = 64;
+pub const TURNOVER_SIZE: usize = 64;
 
 pub fn num_size_bits<Fp:PrimeFieldParams+Sized>() -> usize {
     Fp::Inner::NUM_WORDS*Fp::Inner::WORD_BITS

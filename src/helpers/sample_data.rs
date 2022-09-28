@@ -1,4 +1,6 @@
 
+use fawkes_crypto::ff_uint::{NumRepr, Uint};
+
 use crate::{constants, 
     fawkes_crypto::{
         ff_uint::Num,
@@ -178,6 +180,7 @@ impl<P:PoolParams> State<P> {
         out_account.e = BoundedNum::new(input_energy);
         out_account.i = BoundedNum::new(Num::from(index as u32));
         out_account.p_d = derive_key_p_d(out_account.d.to_num(), eta, params).x;
+        out_account.last_action_day = BoundedNum::new(Num::from_uint_unchecked(NumRepr(Uint::from_u64(1))));
 
         
         let mut out_note: Note<P::Fr> = Note::sample(rng, params);
@@ -203,6 +206,8 @@ impl<P:PoolParams> State<P> {
             out_commit,
             delta,
             memo,  
+            current_day: Num::from_uint_unchecked(NumRepr(Uint::from_u64(1))),
+            daily_limit: Num::from_uint_unchecked(NumRepr(Uint::from_u64(100)))
         };
 
 
