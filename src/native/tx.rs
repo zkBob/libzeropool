@@ -32,6 +32,7 @@ pub struct TransferPub<Fr:PrimeField> {
     pub out_commit: Num<Fr>,
     pub delta: Num<Fr>,
     pub memo: Num<Fr>,
+    pub limit: Num<Fr>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

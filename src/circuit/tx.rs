@@ -8,7 +8,7 @@ use fawkes_crypto::{circuit::{
 }, ff_uint::PrimeFieldParams};
 use fawkes_crypto::core::{signal::Signal, sizedvec::SizedVec,};
 use fawkes_crypto::ff_uint::{Num, NumRepr};
-use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}};
+use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::LIMIT_SIZE};
 use crate::native::tx::{TransferPub, TransferSec, Tx};
 use crate::native::params::PoolParams;
 use crate::constants::{HEIGHT, IN, OUT, BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, POOLID_SIZE_BITS};
@@ -22,6 +22,7 @@ pub struct CTransferPub<C:CS> {
     pub out_commit: CNum<C>,
     pub delta: CNum<C>, // int64 token delta, int64 energy delta, uint32 blocknumber
     pub memo: CNum<C>,
+    pub limit: CNum<C>,
 }
 
 #[derive(Clone, Signal)]
@@ -145,6 +146,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let out_hash = [[out_account_hash].as_ref(), out_note_hash.as_slice()].concat();
 
     //assert out notes are unique or zero
+    let mut out_note_sum: CNum<C> = p.derive_const(&Num::ZERO);
     let mut t:CNum<C> = p.derive_const(&Num::ZERO);
     let mut out_note_zero_num:CNum<C> = p.derive_const(&Num::ZERO);
     for i in 0..OUT {
@@ -152,9 +154,17 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         for j in i+1..OUT {
             t+=(&out_note_hash[i]-&out_note_hash[j]).is_zero().as_num();
         }
+        out_note_sum += s.tx.output.1[i].b.as_num();
     }
     t -= &out_note_zero_num*(&out_note_zero_num-Num::ONE)/Num::from(2u64);
     t.assert_zero();
+
+    // check limit
+    // one note balance: 64 bit
+    // notes count: 127 => 7 bit
+    // limit size: 64 + 7 = 71
+    // sum of output notes <= limit
+    c_comp(&out_note_sum, &p.limit, LIMIT_SIZE).assert_const(&false);
 
     //check output     
     let out_ch = c_out_commitment_hash(&out_hash, params);
