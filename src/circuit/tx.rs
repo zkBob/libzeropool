@@ -5,7 +5,7 @@ use fawkes_crypto::{circuit::{
     num::CNum,
     poseidon::{c_poseidon_merkle_proof_root, c_poseidon, c_poseidon_merkle_tree_root, c_poseidon_sponge, CMerkleProof},
     cs::{RCS, CS}
-}, ff_uint::PrimeFieldParams};
+}, ff_uint::{PrimeFieldParams, Uint}};
 use fawkes_crypto::core::{signal::Signal, sizedvec::SizedVec,};
 use fawkes_crypto::ff_uint::{Num, NumRepr};
 use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::{DAY_SIZE, TURNOVER_SIZE}};
@@ -173,8 +173,13 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         // Check that current day >= last_action_day
         (&is_new_day | p.current_day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
 
-        // TODO: add deposits and withdrawals?
-        let turnover = out_note_sum;
+        let is_transfer = c_comp(&out_note_sum, &p.derive_const(&Num::ZERO), TURNOVER_SIZE);
+        let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE);
+        let deposit_amount = total_value.clone();
+        let withdrawal_amount = -&total_value;
+        let transfer_amount = out_note_sum;
+        let turnover = deposit_amount.switch(&is_deposit, &withdrawal_amount);
+        let turnover = transfer_amount.switch(&is_transfer, &turnover);
         let turnover = turnover.switch(&is_new_day, &(in_account.today_turnover_used.as_num() + &turnover));
 
         // Check turnover limit
