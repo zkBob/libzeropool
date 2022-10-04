@@ -16,6 +16,7 @@ pub trait PoolParams: Clone + Sized {
     fn compress(&self) -> &PoseidonParams<Self::Fr>;
     fn note(&self) -> &PoseidonParams<Self::Fr>;
     fn account(&self) -> &PoseidonParams<Self::Fr>;
+    fn account_old(&self) -> &PoseidonParams<Self::Fr>;
     fn eddsa(&self) -> &PoseidonParams<Self::Fr>;
     fn sponge(&self) -> &PoseidonParams<Self::Fr>;
     fn nullifier_intermediate(&self) -> &PoseidonParams<Self::Fr>;
@@ -28,6 +29,7 @@ pub struct PoolBN256 {
     pub compress: PoseidonParams<Fr>,
     pub note: PoseidonParams<Fr>,
     pub account: PoseidonParams<Fr>,
+    pub account_old: PoseidonParams<Fr>,
     pub eddsa: PoseidonParams<Fr>,
     pub sponge: PoseidonParams<Fr>,
     pub nullifier_intermediate: PoseidonParams<Fr>,
@@ -56,6 +58,10 @@ impl PoolParams for PoolBN256 {
     }
 
     fn account(&self) -> &PoseidonParams<Self::Fr> {
+        &self.account
+    }
+
+    fn account_old(&self) -> &PoseidonParams<Self::Fr> {
         &self.account
     }
 

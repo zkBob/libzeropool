@@ -265,7 +265,7 @@ impl<P:PoolParams> State<P> {
             let mut t = vec![];
             for j in 0..N_ITEMS {
                 let (a, n) = items[j].clone();
-                t.push(a.hash(params));
+                t.push(a.hash_old(params));
                 t.push(n.hash(params));
             }
             if t.len() & 1 == 1 {

@@ -31,6 +31,17 @@ impl<C:CS> CAccount<C> {
         c_poseidon(&inputs, params.account())
     }
 
+    pub fn hash_old<P: PoolParams<Fr = C::Fr>>(&self, params: &P) -> CNum<C> {
+        let inputs = [
+            self.d.as_num().clone(), 
+            self.p_d.clone(), 
+            self.i.as_num().clone(), 
+            self.b.as_num().clone(), 
+            self.e.as_num().clone(),
+        ];
+        c_poseidon(&inputs, params.account_old())
+    }
+
     pub fn is_initial(&self, poolid:&CNum<C>) -> CBool<C> {
         (self.i.as_num()+self.b.as_num()+self.e.as_num()+self.last_action_day.as_num()+self.today_turnover_used.as_num()).is_zero() & self.d.as_num().is_eq(poolid)
     }

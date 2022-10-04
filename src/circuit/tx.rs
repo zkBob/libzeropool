@@ -126,9 +126,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     
     
     //build input hashes
-    let in_account_hash = s.tx.input.0.hash(params);
     let in_note_hash = s.tx.input.1.iter().map(|n| n.hash(params)).collect::<Vec<_>>();
-    let in_hash = [[in_account_hash.clone()].as_ref(), in_note_hash.as_slice()].concat();
 
     //assert input notes are unique
     let mut t:CNum<C> = p.derive_const(&Num::ZERO);
@@ -165,9 +163,9 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     (&out_ch - &p.out_commit).assert_zero();
 
     // Check daily limits
+    let in_account = &s.tx.input.0;
+    let out_account = &s.tx.output.0;
     {
-        let in_account = &s.tx.input.0;
-        let out_account = &s.tx.output.0;
         let is_new_day = c_comp(&p.current_day, &in_account.last_action_day.as_num(), DAY_SIZE);
 
         // Check that current day >= last_action_day
@@ -190,7 +188,6 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         out_account.last_action_day.as_num().is_eq(&p.current_day).assert_const(&true);
     }
 
-
     //build decryption key
     //address is derived from decryption key
     //also decryption key is using for decrypting the data of notes
@@ -205,14 +202,31 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         (&s.tx.input.1[i].p_d - c_derive_key_p_d(&s.tx.input.1[i].d.as_num(), &eta_bits, params).x).assert_zero();
     }
 
+    //assuming input_pos_index <= current_index
+    let ref input_pos_index = c_from_bits_le(s.in_proof.0.path.as_slice());
+
+    let (in_account_hash, nullifier) = {
+        let in_account_hash_new = s.tx.input.0.hash(params);
+        let in_account_hash_old = s.tx.input.0.hash_old(params);
+
+        let nullifier_new = c_nullfifier(&in_account_hash_new, &eta, input_pos_index, params);
+        let nullifier_old = c_nullfifier(&in_account_hash_old, &eta, input_pos_index, params);
+
+        let is_old_account = nullifier_old.is_eq(&p.nullifier);
+        (!&is_old_account | 
+            in_account.last_action_day.as_num().is_eq(&p.derive_const(&Num::ZERO)) & 
+            in_account.today_turnover_used.as_num().is_eq(&p.derive_const(&Num::ZERO))
+        ).assert_const(&true);
+
+        let in_account_hash = in_account_hash_old.switch(&is_old_account, &in_account_hash_new);
+        let nullifier = nullifier_old.switch(&is_old_account, &nullifier_new);
+        (in_account_hash, nullifier)
+    };
 
     //build merkle proofs and check nullifier
     {
-        //assuming input_pos_index <= current_index
-        let ref input_pos_index = c_from_bits_le(s.in_proof.0.path.as_slice());
-
         //check nullifier
-        (&p.nullifier - c_nullfifier(&in_account_hash, &eta, input_pos_index, params)).assert_zero();
+        (&p.nullifier - nullifier).assert_zero();
 
         let cur_root = c_poseidon_merkle_proof_root(&in_account_hash, &s.in_proof.0, params.compress());
         //assert root == cur_root || account.is_dummy()
@@ -252,6 +266,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     (&p.memo + Num::ONE).assert_nonzero();
 
     //build tx hash
+    let in_hash = [[in_account_hash.clone()].as_ref(), in_note_hash.as_slice()].concat();
     let tx_hash = c_tx_hash(&in_hash, &out_ch, params);
 
     //check signature
