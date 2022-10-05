@@ -174,15 +174,16 @@ impl<P:PoolParams> State<P> {
         }
 
         let mut out_account: Account<P::Fr> = Account::sample(rng, params);
-        out_account.b = BoundedNum::new(input_value);
+        out_account.b = BoundedNum::new(input_value - Num::ONE);
         out_account.e = BoundedNum::new(input_energy);
         out_account.i = BoundedNum::new(Num::from(index as u32));
         out_account.p_d = derive_key_p_d(out_account.d.to_num(), eta, params).x;
-        out_account.last_action_day = BoundedNum::new(Num::from_uint_unchecked(NumRepr(Uint::from_u64(1))));
+        out_account.last_action_day = BoundedNum::new(Num::ONE);
+        out_account.today_turnover_used = BoundedNum::new(Num::ONE);
 
         
         let mut out_note: Note<P::Fr> = Note::sample(rng, params);
-        out_note.b = BoundedNum::new(Num::ZERO);
+        out_note.b = BoundedNum::new(Num::ONE);
 
         let mut input_hashes = vec![self.items[self.account_id].0.hash_old(params)];
         for &i in self.note_id.iter() {
@@ -204,8 +205,8 @@ impl<P:PoolParams> State<P> {
             out_commit,
             delta,
             memo,  
-            current_day: Num::from_uint_unchecked(NumRepr(Uint::from_u64(1))),
-            daily_limit: Num::from_uint_unchecked(NumRepr(Uint::from_u64(100)))
+            current_day: Num::ONE,
+            daily_limit: Num::ONE
         };
 
 

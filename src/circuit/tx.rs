@@ -172,7 +172,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         (&is_new_day | p.current_day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
 
         let is_transfer = c_comp(&out_note_sum, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
-        let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
+        let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), BALANCE_SIZE_BITS);
         let deposit_amount = total_value.clone();
         let withdrawal_amount = -&total_value;
         let transfer_amount = out_note_sum;
