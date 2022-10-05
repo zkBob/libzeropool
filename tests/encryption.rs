@@ -31,10 +31,10 @@ fn test_encryption() {
     let result_out = cipher::decrypt_out(sender_eta, &ciphertext, &*POOL_PARAMS);
 
     assert!(result_out.is_some(), "Could not decrypt outgoing data.");
-        let (account_out, note_out) = result_out.unwrap();
-        assert!(note.len()==note_out.len() && 
-        note.iter().zip(note_out.iter()).all(|(l,r)| l==r) &&
-        account == account_out, "Wrong outgoing data decrypted");
+    let (account_out, note_out) = result_out.unwrap();
+    assert!(note.len()==note_out.len() && 
+    note.iter().zip(note_out.iter()).all(|(l,r)| l==r) &&
+    account == account_out, "Wrong outgoing data decrypted");
 
 
     let result_out = cipher::decrypt_in(receiver_eta, &ciphertext, &*POOL_PARAMS);

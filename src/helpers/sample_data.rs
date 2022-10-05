@@ -111,7 +111,7 @@ impl<P:PoolParams> State<P> {
             let mut t = vec![];
             for j in 0..N_ITEMS {
                 let (a, n) = items[j].clone();
-                t.push(a.hash(params));
+                t.push(a.hash_old(params));
                 t.push(n.hash(params));
             }
             if t.len() & 1 == 1 {
@@ -174,16 +174,18 @@ impl<P:PoolParams> State<P> {
         }
 
         let mut out_account: Account<P::Fr> = Account::sample(rng, params);
-        out_account.b = BoundedNum::new(input_value);
+        out_account.b = BoundedNum::new(input_value - Num::ONE);
         out_account.e = BoundedNum::new(input_energy);
         out_account.i = BoundedNum::new(Num::from(index as u32));
         out_account.p_d = derive_key_p_d(out_account.d.to_num(), eta, params).x;
+        out_account.last_action_day = BoundedNum::new(Num::ONE);
+        out_account.daily_turnover = BoundedNum::new(Num::ONE);
 
         
         let mut out_note: Note<P::Fr> = Note::sample(rng, params);
-        out_note.b = BoundedNum::new(Num::ZERO);
+        out_note.b = BoundedNum::new(Num::ONE);
 
-        let mut input_hashes = vec![self.items[self.account_id].0.hash(params)];
+        let mut input_hashes = vec![self.items[self.account_id].0.hash_old(params)];
         for &i in self.note_id.iter() {
             input_hashes.push(self.items[i].1.hash(params));
         }
@@ -192,8 +194,7 @@ impl<P:PoolParams> State<P> {
         let out_hashes:Vec<_> = std::iter::once(out_account.hash(params)).chain(out_notes.iter().map(|n| n.hash(params))).collect();
         let out_commit = out_commitment_hash(&out_hashes, params);
         let tx_hash = tx_hash(&input_hashes, out_commit, params);
-        let (eddsa_s,eddsa_r) = tx_sign(self.sigma, tx_hash, params);
-
+        let (eddsa_s, eddsa_r) = tx_sign(self.sigma, tx_hash, params);
 
         let delta = make_delta::<P::Fr>(Num::ZERO, Num::ZERO, Num::from(index as u32), Num::ZERO);
         
@@ -202,19 +203,15 @@ impl<P:PoolParams> State<P> {
             nullifier,
             out_commit,
             delta,
-            memo,  
+            memo,
+            day: Num::ONE,
+            daily_limit: Num::ONE
         };
-
-
-
-        
     
         let tx = Tx {
             input: (self.items[self.account_id].0.clone(), self.note_id.iter().map(|&i| self.items[i].1.clone()).collect()),
             output: (out_account, out_notes.iter().cloned().collect() )
         };
-
-
         
         let s = TransferSec::<P::Fr> {
             tx,
