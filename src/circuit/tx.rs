@@ -186,13 +186,11 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         // Check that current day >= last_action_day
         (&is_new_day | p.day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
 
-        let is_transfer = c_comp(&out_notes_sum, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
         let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
         let deposit_amount = total_value.clone();
         let withdrawal_amount = -&total_value;
-        let transfer_amount = out_notes_sum;
         let turnover = deposit_amount.switch(&is_deposit, &withdrawal_amount);
-        let turnover = transfer_amount.switch(&is_transfer, &turnover);
+        let turnover = turnover + out_notes_sum;
         let turnover = turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &turnover));
 
         // Check turnover limit
@@ -207,8 +205,8 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let ref input_pos_index = c_from_bits_le(s.in_proof.0.path.as_slice());
 
     let (in_account_hash, nullifier) = {
-        let in_account_hash_new = s.tx.input.0.hash(params);
-        let in_account_hash_old = s.tx.input.0.hash_old(params);
+        let in_account_hash_new = in_account.hash(params);
+        let in_account_hash_old = in_account.hash_old(params);
 
         let nullifier_new = c_nullfifier(&in_account_hash_new, &eta, input_pos_index, params);
         let nullifier_old = c_nullfifier(&in_account_hash_old, &eta, input_pos_index, params);
