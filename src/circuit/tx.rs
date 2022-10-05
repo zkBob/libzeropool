@@ -5,7 +5,7 @@ use fawkes_crypto::{circuit::{
     num::CNum,
     poseidon::{c_poseidon_merkle_proof_root, c_poseidon, c_poseidon_merkle_tree_root, c_poseidon_sponge, CMerkleProof},
     cs::{RCS, CS}
-}, ff_uint::{PrimeFieldParams, Uint}};
+}, ff_uint::PrimeFieldParams};
 use fawkes_crypto::core::{signal::Signal, sizedvec::SizedVec,};
 use fawkes_crypto::ff_uint::{Num, NumRepr};
 use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::{DAY_SIZE, TURNOVER_SIZE}};

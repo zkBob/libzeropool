@@ -62,7 +62,7 @@ impl PoolParams for PoolBN256 {
     }
 
     fn account_old(&self) -> &PoseidonParams<Self::Fr> {
-        &self.account
+        &self.account_old
     }
 
     fn eddsa(&self) -> &PoseidonParams<Self::Fr> {

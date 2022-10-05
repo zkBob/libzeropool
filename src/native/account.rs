@@ -37,7 +37,7 @@ impl<Fr:PrimeField> Account<Fr> {
             self.i.to_num(), 
             self.b.to_num(), 
             self.e.to_num(), 
-        ], params.account())
+        ], params.account_old())
     }
 }
 

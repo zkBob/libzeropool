@@ -113,7 +113,7 @@ impl<P:PoolParams> State<P> {
             let mut t = vec![];
             for j in 0..N_ITEMS {
                 let (a, n) = items[j].clone();
-                t.push(a.hash(params));
+                t.push(a.hash_old(params));
                 t.push(n.hash(params));
             }
             if t.len() & 1 == 1 {
@@ -184,7 +184,7 @@ impl<P:PoolParams> State<P> {
         let mut out_note: Note<P::Fr> = Note::sample(rng, params);
         out_note.b = BoundedNum::new(Num::ZERO);
 
-        let mut input_hashes = vec![self.items[self.account_id].0.hash(params)];
+        let mut input_hashes = vec![self.items[self.account_id].0.hash_old(params)];
         for &i in self.note_id.iter() {
             input_hashes.push(self.items[i].1.hash(params));
         }
@@ -452,7 +452,15 @@ impl<P:PoolParams> State<P> {
         let in_notes: Vec<_> = self.note_id.iter().map(|&i| self.items[i].1.clone()).collect();
         let in_notes: Vec<_> = in_notes.clone().into_iter().chain(owned_zero_notes).take(constants::IN).collect();
 
-        let mut input_hashes = vec![self.items[self.account_id].0.hash(params)];
+        let account_hash = {
+            if self.hashes[0].contains(&self.items[self.account_id].0.hash_old(params)) {
+                self.items[self.account_id].0.hash_old(params)
+            } else {
+                self.items[self.account_id].0.hash(params)
+            }
+        };
+
+        let mut input_hashes = vec![account_hash];
         for note in in_notes.iter() {
             input_hashes.push(note.hash(params));
         }
