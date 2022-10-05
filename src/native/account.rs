@@ -13,8 +13,8 @@ pub struct Account<Fr:PrimeField> {
     pub i: BoundedNum<Fr, { constants::HEIGHT }>,
     pub b: BoundedNum<Fr, { constants::BALANCE_SIZE_BITS }>,
     pub e: BoundedNum<Fr, { constants::ENERGY_SIZE_BITS }>,
-    pub last_action_day: BoundedNum<Fr, { constants::DAY_SIZE }>,
-    pub today_turnover_used: BoundedNum<Fr, { constants::TURNOVER_SIZE }>,
+    pub last_action_day: BoundedNum<Fr, { constants::DAY_SIZE_BITS }>,
+    pub today_turnover_used: BoundedNum<Fr, { constants::TURNOVER_SIZE_BITS }>,
 }
 
 impl<Fr:PrimeField> Account<Fr> {

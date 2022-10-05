@@ -12,8 +12,8 @@ pub struct CAccount<C:CS> {
     pub i: CBoundedNum<C, { constants::HEIGHT }>,
     pub b: CBoundedNum<C, { constants::BALANCE_SIZE_BITS }>,
     pub e: CBoundedNum<C, { constants::ENERGY_SIZE_BITS }>,
-    pub last_action_day: CBoundedNum<C, { constants::DAY_SIZE }>,
-    pub today_turnover_used: CBoundedNum<C, { constants::TURNOVER_SIZE }>,
+    pub last_action_day: CBoundedNum<C, { constants::DAY_SIZE_BITS }>,
+    pub today_turnover_used: CBoundedNum<C, { constants::TURNOVER_SIZE_BITS }>,
 }
 
 

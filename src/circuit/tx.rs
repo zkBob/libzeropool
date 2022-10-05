@@ -8,7 +8,7 @@ use fawkes_crypto::{circuit::{
 }, ff_uint::PrimeFieldParams};
 use fawkes_crypto::core::{signal::Signal, sizedvec::SizedVec,};
 use fawkes_crypto::ff_uint::{Num, NumRepr};
-use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::{DAY_SIZE, TURNOVER_SIZE}};
+use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::{DAY_SIZE_BITS, TURNOVER_SIZE_BITS}};
 use crate::native::tx::{TransferPub, TransferSec, Tx};
 use crate::native::params::PoolParams;
 use crate::constants::{HEIGHT, IN, OUT, BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, POOLID_SIZE_BITS};
@@ -166,13 +166,13 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let in_account = &s.tx.input.0;
     let out_account = &s.tx.output.0;
     {
-        let is_new_day = c_comp(&p.current_day, &in_account.last_action_day.as_num(), DAY_SIZE);
+        let is_new_day = c_comp(&p.current_day, &in_account.last_action_day.as_num(), DAY_SIZE_BITS);
 
         // Check that current day >= last_action_day
         (&is_new_day | p.current_day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
 
-        let is_transfer = c_comp(&out_note_sum, &p.derive_const(&Num::ZERO), TURNOVER_SIZE);
-        let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE);
+        let is_transfer = c_comp(&out_note_sum, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
+        let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
         let deposit_amount = total_value.clone();
         let withdrawal_amount = -&total_value;
         let transfer_amount = out_note_sum;
@@ -181,7 +181,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         let turnover = turnover.switch(&is_new_day, &(in_account.today_turnover_used.as_num() + &turnover));
 
         // Check turnover limit
-        c_comp(&turnover, &p.daily_limit, TURNOVER_SIZE).assert_const(&false);    
+        c_comp(&turnover, &p.daily_limit, TURNOVER_SIZE_BITS).assert_const(&false);    
         // Check output account turnover
         out_account.today_turnover_used.as_num().is_eq(&turnover).assert_const(&true);
         // Check output account last_action_day
