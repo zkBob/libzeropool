@@ -183,16 +183,13 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     {
         let is_new_day = c_comp(&p.day, &in_account.last_action_day.as_num(), DAY_SIZE_BITS);
 
+        let delta_value_is_positive = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
+        let delta_value_abs = total_value.clone().switch(&delta_value_is_positive, &-&total_value);
+        let tx_turnover = delta_value_abs + out_notes_sum;
+        let turnover = tx_turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &tx_turnover));
+
         // Check that current day >= last_action_day
         (&is_new_day | p.day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
-
-        let is_deposit = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
-        let deposit_amount = total_value.clone();
-        let withdrawal_amount = -&total_value;
-        let turnover = deposit_amount.switch(&is_deposit, &withdrawal_amount);
-        let turnover = turnover + out_notes_sum;
-        let turnover = turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &turnover));
-
         // Check turnover limit
         c_comp(&turnover, &p.daily_limit, TURNOVER_SIZE_BITS).assert_const(&false);    
         // Check output account turnover
