@@ -207,7 +207,8 @@ impl<P:PoolParams> State<P> {
             delta,
             memo,
             day: BoundedNum::new(Num::ONE),
-            daily_limit: BoundedNum::new(Num::ONE)
+            daily_limit: BoundedNum::new(Num::ONE),
+            out_note_min: BoundedNum::new(Num::ZERO),
         };
     
         let tx = Tx {
@@ -291,10 +292,19 @@ impl<P:PoolParams> State<P> {
         }
     }
 
-    pub fn sample_deterministic_transfer<R:Rng>(&mut self, rng:&mut R, params:&P, amount: u64, day: u64, daily_limit: u64) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
+    pub fn sample_deterministic_transfer<R:Rng>(
+        &mut self, 
+        rng: &mut R, 
+        params: &P, 
+        amount: u64, 
+        day: u64, 
+        daily_limit: u64,
+        out_note_min: u64,
+    ) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
         let amount = Num::from_uint_unchecked(NumRepr(Uint::from_u64(amount)));
         let day = Num::from_uint_unchecked(NumRepr(Uint::from_u64(day)));
         let daily_limit = Num::from_uint_unchecked(NumRepr(Uint::from_u64(daily_limit)));
+        let out_note_min = Num::from_uint_unchecked(NumRepr(Uint::from_u64(out_note_min)));
 
         let index = self.items.len()*2;
         let a = derive_key_a(self.sigma, params);
@@ -332,13 +342,22 @@ impl<P:PoolParams> State<P> {
         out_note.b = BoundedNum::new(amount);
         out_note.p_d = derive_key_p_d(out_note.d.to_num(), eta, params).x;
 
-        self.prepare_tx(rng, params, out_account, Some(out_note), Num::ZERO, day, daily_limit)
+        self.prepare_tx(rng, params, out_account, Some(out_note), Num::ZERO, day, daily_limit, out_note_min)
     }
 
-    pub fn sample_deterministic_deposit<R:Rng>(&mut self, rng:&mut R, params:&P, amount: u64, day: u64, daily_limit: u64) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
+    pub fn sample_deterministic_deposit<R:Rng>(
+        &mut self, 
+        rng: &mut R, 
+        params: &P, 
+        amount: u64, 
+        day: u64, 
+        daily_limit: u64,
+        out_note_min: u64,
+    ) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
         let amount = Num::from_uint_unchecked(NumRepr(Uint::from_u64(amount)));
         let day = Num::from_uint_unchecked(NumRepr(Uint::from_u64(day)));
         let daily_limit = Num::from_uint_unchecked(NumRepr(Uint::from_u64(daily_limit)));
+        let out_note_min = Num::from_uint_unchecked(NumRepr(Uint::from_u64(out_note_min)));
 
         let index = self.items.len()*2;
         let a = derive_key_a(self.sigma, params);
@@ -369,13 +388,22 @@ impl<P:PoolParams> State<P> {
         out_account.last_action_day = BoundedNum::new(day);
         out_account.daily_turnover = BoundedNum::new(today_turnover_used);
 
-        self.prepare_tx(rng, params, out_account, None, amount, day, daily_limit)
+        self.prepare_tx(rng, params, out_account, None, amount, day, daily_limit, out_note_min)
     }
 
-    pub fn sample_deterministic_withdrawal<R:Rng>(&mut self, rng:&mut R, params:&P, amount: u64, day: u64, daily_limit: u64) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
+    pub fn sample_deterministic_withdrawal<R:Rng>(
+        &mut self, 
+        rng: &mut R, 
+        params:&P, 
+        amount: u64, 
+        day: u64, 
+        daily_limit: u64,
+        out_note_min: u64,
+    ) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
         let amount = Num::from_uint_unchecked(NumRepr(Uint::from_u64(amount)));
         let day = Num::from_uint_unchecked(NumRepr(Uint::from_u64(day)));
         let daily_limit = Num::from_uint_unchecked(NumRepr(Uint::from_u64(daily_limit)));
+        let out_note_min = Num::from_uint_unchecked(NumRepr(Uint::from_u64(out_note_min)));
 
         let index = self.items.len()*2;
         let a = derive_key_a(self.sigma, params);
@@ -406,7 +434,7 @@ impl<P:PoolParams> State<P> {
         out_account.last_action_day = BoundedNum::new(day);
         out_account.daily_turnover = BoundedNum::new(today_turnover_used);
 
-        self.prepare_tx(rng, params, out_account, None, -amount, day, daily_limit)
+        self.prepare_tx(rng, params, out_account, None, -amount, day, daily_limit, out_note_min)
     }
 
 
@@ -418,7 +446,8 @@ impl<P:PoolParams> State<P> {
         out_note: Option<Note<P::Fr>>,
         delta_value: Num<P::Fr>,
         day: Num<P::Fr>,
-        daily_limit: Num<P::Fr>
+        daily_limit: Num<P::Fr>,
+        out_note_min: Num<P::Fr>,
     ) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
         let zero_note = Note {
             d: BoundedNum::new(Num::ZERO),
@@ -476,6 +505,7 @@ impl<P:PoolParams> State<P> {
         
         let day = BoundedNum::new(day);
         let daily_limit = BoundedNum::new(daily_limit);
+        let out_note_min = BoundedNum::new(out_note_min);
         let p = TransferPub::<P::Fr> {
             root,
             nullifier,
@@ -483,7 +513,8 @@ impl<P:PoolParams> State<P> {
             delta,
             memo,
             day,
-            daily_limit
+            daily_limit, 
+            out_note_min
         };
 
         let tx = Tx {

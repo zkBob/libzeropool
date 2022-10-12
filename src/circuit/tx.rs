@@ -26,6 +26,7 @@ pub struct CTransferPub<C:CS> {
     pub memo: CNum<C>,
     pub day: CBoundedNum<C, { DAY_SIZE_BITS }>,
     pub daily_limit: CBoundedNum<C, { TURNOVER_SIZE_BITS }>,
+    pub out_note_min: CBoundedNum<C, { BALANCE_SIZE_BITS }>,
 }
 
 #[derive(Clone, Signal)]
@@ -146,12 +147,18 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let out_note_hash = s.tx.output.1.iter().map(|e| e.hash(params)).collect::<Vec<_>>();
     let out_hash = [[out_account_hash].as_ref(), out_note_hash.as_slice()].concat();
 
-    //assert out notes are unique or zero, compute out sum
+    //assert out notes are unique or zero, check min value, compute out sum
     let mut out_notes_sum: CNum<C> = p.derive_const(&Num::ZERO);
     let mut t:CNum<C> = p.derive_const(&Num::ZERO);
     let mut out_note_zero_num:CNum<C> = p.derive_const(&Num::ZERO);
     for i in 0..OUT {
-        out_note_zero_num+=s.tx.output.1[i].is_zero().as_num();
+        let out_note_is_zero = s.tx.output.1[i].is_zero();
+        let out_note_value_is_greater_than_min = c_comp(&s.tx.output.1[i].b.as_num(), &p.out_note_min.as_num(), BALANCE_SIZE_BITS);
+        
+        // Check output notes min value
+        (&out_note_is_zero | out_note_value_is_greater_than_min).assert_const(&true);
+
+        out_note_zero_num += out_note_is_zero.as_num();
         for j in i+1..OUT {
             t+=(&out_note_hash[i]-&out_note_hash[j]).is_zero().as_num();
         }
@@ -203,6 +210,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     //assuming input_pos_index <= current_index
     let ref input_pos_index = c_from_bits_le(s.in_proof.0.path.as_slice());
 
+    // Check in_account_hash. If account is old, last_action_day and daily_turnover must be zero
     let (in_account_hash, nullifier) = {
         let in_account_hash_new = in_account.hash(params);
         let in_account_hash_old = in_account.hash_old(params);
@@ -211,10 +219,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         let nullifier_old = c_nullfifier(&in_account_hash_old, &eta, input_pos_index, params);
 
         let is_old_account = nullifier_old.is_eq(&p.nullifier);
-        (!&is_old_account | 
-            in_account.last_action_day.as_num().is_eq(&p.derive_const(&Num::ZERO)) & 
-            in_account.daily_turnover.as_num().is_eq(&p.derive_const(&Num::ZERO))
-        ).assert_const(&true);
+        (!&is_old_account | (in_account.last_action_day.as_num() + in_account.daily_turnover.as_num()).is_zero()).assert_const(&true);
 
         let in_account_hash = in_account_hash_old.switch(&is_old_account, &in_account_hash_new);
         let nullifier = nullifier_old.switch(&is_old_account, &nullifier_new);
