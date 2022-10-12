@@ -206,8 +206,8 @@ impl<P:PoolParams> State<P> {
             out_commit,
             delta,
             memo,
-            day: Num::ONE,
-            daily_limit: Num::ONE
+            day: BoundedNum::new(Num::ONE),
+            daily_limit: BoundedNum::new(Num::ONE)
         };
     
         let tx = Tx {
@@ -474,6 +474,8 @@ impl<P:PoolParams> State<P> {
 
         let delta = make_delta::<P::Fr>(delta_value, Num::ZERO, Num::from(index as u32), Num::ZERO);
         
+        let day = BoundedNum::new(day);
+        let daily_limit = BoundedNum::new(daily_limit);
         let p = TransferPub::<P::Fr> {
             root,
             nullifier,

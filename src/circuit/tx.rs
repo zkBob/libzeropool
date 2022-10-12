@@ -13,6 +13,8 @@ use crate::native::tx::{TransferPub, TransferSec, Tx};
 use crate::native::params::PoolParams;
 use crate::constants::{HEIGHT, IN, OUT, BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, POOLID_SIZE_BITS};
 
+use super::boundednum::CBoundedNum;
+
 
 #[derive(Clone, Signal)]
 #[Value = "TransferPub<C::Fr>"]
@@ -22,8 +24,8 @@ pub struct CTransferPub<C:CS> {
     pub out_commit: CNum<C>,
     pub delta: CNum<C>, // int64 token delta, int64 energy delta, uint32 blocknumber
     pub memo: CNum<C>,
-    pub day: CNum<C>,
-    pub daily_limit: CNum<C>,
+    pub day: CBoundedNum<C, { DAY_SIZE_BITS }>,
+    pub daily_limit: CBoundedNum<C, { TURNOVER_SIZE_BITS }>,
 }
 
 #[derive(Clone, Signal)]
@@ -181,7 +183,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let in_account = &s.tx.input.0;
     let out_account = &s.tx.output.0;
     {
-        let is_new_day = c_comp(&p.day, &in_account.last_action_day.as_num(), DAY_SIZE_BITS);
+        let is_new_day = c_comp(&p.day.as_num(), &in_account.last_action_day.as_num(), DAY_SIZE_BITS);
 
         let delta_value_is_positive = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
         let delta_value_abs = total_value.clone().switch(&delta_value_is_positive, &-&total_value);
@@ -189,13 +191,13 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         let turnover = tx_turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &tx_turnover));
 
         // Check that current day >= last_action_day
-        (&is_new_day | p.day.is_eq(&in_account.last_action_day.as_num())).assert_const(&true);
+        (&is_new_day | p.day.is_eq(&in_account.last_action_day)).assert_const(&true);
         // Check turnover limit
-        c_comp(&turnover, &p.daily_limit, TURNOVER_SIZE_BITS).assert_const(&false);    
+        c_comp(&turnover, &p.daily_limit.as_num(), TURNOVER_SIZE_BITS).assert_const(&false);    
         // Check output account turnover
         out_account.daily_turnover.as_num().is_eq(&turnover).assert_const(&true);
         // Check output account last_action_day
-        out_account.last_action_day.as_num().is_eq(&p.day).assert_const(&true);
+        out_account.last_action_day.as_num().is_eq(&p.day.as_num()).assert_const(&true);
     }
 
     //assuming input_pos_index <= current_index
@@ -262,7 +264,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     (&p.memo + Num::ONE).assert_nonzero();
 
     //build tx 
-    let in_hash = [[in_account_hash.clone()].as_ref(), in_note_hash.as_slice()].concat();
+    let in_hash = [[in_account_hash].as_ref(), in_note_hash.as_slice()].concat();
     let tx_hash = c_tx_hash(&in_hash, &out_ch, params);
 
     //check signature

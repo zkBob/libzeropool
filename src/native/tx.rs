@@ -1,4 +1,4 @@
-use crate::{constants::{BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, HEIGHT, IN, OUT, POOLID_SIZE_BITS}, fawkes_crypto::{
+use crate::{constants::{BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, HEIGHT, IN, OUT, POOLID_SIZE_BITS, DAY_SIZE_BITS, TURNOVER_SIZE_BITS}, fawkes_crypto::{
         native::{
             eddsaposeidon::{eddsaposeidon_sign, eddsaposeidon_verify},
             poseidon::{poseidon, poseidon_merkle_tree_root, poseidon_sponge, MerkleProof},
@@ -14,6 +14,8 @@ use crate::{constants::{BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, HEIGHT, IN, OUT, PO
 
 
 use std::fmt::Debug;
+
+use super::boundednum::BoundedNum;
 
 
 
@@ -32,8 +34,8 @@ pub struct TransferPub<Fr:PrimeField> {
     pub out_commit: Num<Fr>,
     pub delta: Num<Fr>,
     pub memo: Num<Fr>,
-    pub day: Num<Fr>,
-    pub daily_limit: Num<Fr>,
+    pub day: BoundedNum<Fr, { DAY_SIZE_BITS }>,
+    pub daily_limit: BoundedNum<Fr, { TURNOVER_SIZE_BITS }>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
