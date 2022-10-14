@@ -154,10 +154,10 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let mut out_note_zero_num:CNum<C> = p.derive_const(&Num::ZERO);
     for i in 0..OUT {
         let out_note_is_zero = s.tx.output.1[i].is_zero();
-        let out_note_value_is_greater_than_min = c_comp(&s.tx.output.1[i].b.as_num(), &p.out_note_min.as_num(), BALANCE_SIZE_BITS);
+        let is_equal_or_greater_than_min = !c_comp(&p.out_note_min.as_num(), &s.tx.output.1[i].b.as_num(), BALANCE_SIZE_BITS);
         
         // Check output notes min value
-        (&out_note_is_zero | out_note_value_is_greater_than_min).assert_const(&true);
+        (&out_note_is_zero | is_equal_or_greater_than_min).assert_const(&true);
 
         out_note_zero_num += out_note_is_zero.as_num();
         for j in i+1..OUT {

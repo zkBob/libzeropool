@@ -156,7 +156,7 @@ fn test_out_note_min_limit_1() {
     let mut rng = thread_rng();
    
     let mut state = State::sample_deterministic_state(&mut rng, &*POOL_PARAMS, 1000);
-    transfer(&mut state, &mut rng, 0, 300, 1000, 0, 0, false);
+    transfer(&mut state, &mut rng, 0, 300, 1000, 0, 0, true);
 
     let mut state = State::sample_deterministic_state(&mut rng, &*POOL_PARAMS, 1000);
     transfer(&mut state, &mut rng, 0, 300, 1000, 0, 100, false);
@@ -165,7 +165,7 @@ fn test_out_note_min_limit_1() {
     transfer(&mut state, &mut rng, 99, 300, 1000, 0, 100, false);
 
     let mut state = State::sample_deterministic_state(&mut rng, &*POOL_PARAMS, 1000);
-    transfer(&mut state, &mut rng, 100, 300, 1000, 0, 100, false);
+    transfer(&mut state, &mut rng, 100, 300, 1000, 0, 100, true);
 
     let mut state = State::sample_deterministic_state(&mut rng, &*POOL_PARAMS, 1000);
     transfer(&mut state, &mut rng, 101, 300, 1000, 0, 100, true);
