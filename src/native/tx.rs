@@ -36,6 +36,7 @@ pub struct TransferPub<Fr:PrimeField> {
     pub memo: Num<Fr>,
     pub day: BoundedNum<Fr, { DAY_SIZE_BITS }>,
     pub daily_limit: BoundedNum<Fr, { TURNOVER_SIZE_BITS }>,
+    pub transfer_limit: BoundedNum<Fr, { BALANCE_SIZE_BITS }>,
     pub out_note_min: BoundedNum<Fr, { BALANCE_SIZE_BITS }>,
 }
 

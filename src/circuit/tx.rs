@@ -26,6 +26,7 @@ pub struct CTransferPub<C:CS> {
     pub memo: CNum<C>,
     pub day: CBoundedNum<C, { DAY_SIZE_BITS }>,
     pub daily_limit: CBoundedNum<C, { TURNOVER_SIZE_BITS }>,
+    pub transfer_limit: CBoundedNum<C, { BALANCE_SIZE_BITS }>,
     pub out_note_min: CBoundedNum<C, { BALANCE_SIZE_BITS }>,
 }
 
@@ -186,7 +187,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         (&s.tx.input.1[i].p_d - c_derive_key_p_d(&s.tx.input.1[i].d.as_num(), &eta_bits, params).x).assert_zero();
     }
 
-    // Check daily turnover limit
+    // Check daily turnover limit and transfer limit
     let in_account = &s.tx.input.0;
     let out_account = &s.tx.output.0;
     {
@@ -194,9 +195,11 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
 
         let delta_value_is_positive = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
         let delta_value_abs = total_value.clone().switch(&delta_value_is_positive, &-&total_value);
-        let tx_turnover = delta_value_abs + out_notes_sum;
+        let tx_turnover = delta_value_abs + &out_notes_sum;
         let turnover = tx_turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &tx_turnover));
 
+        // Check transfer limit
+        c_comp(&out_notes_sum, &p.transfer_limit.as_num(), BALANCE_SIZE_BITS).assert_const(&false);
         // Check that current day >= last_action_day
         (&is_new_day | p.day.is_eq(&in_account.last_action_day)).assert_const(&true);
         // Check turnover limit
