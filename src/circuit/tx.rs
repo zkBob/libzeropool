@@ -193,8 +193,8 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     {
         let is_new_day = c_comp(&p.day.as_num(), &in_account.last_action_day.as_num(), DAY_SIZE_BITS);
 
-        let delta_value_is_positive = c_comp(&total_value, &p.derive_const(&Num::ZERO), TURNOVER_SIZE_BITS);
-        let delta_value_abs = total_value.clone().switch(&delta_value_is_positive, &-&total_value);
+        let delta_value_is_positive = c_comp(&total_value, &p.derive_const(&Num::ZERO), BALANCE_SIZE_BITS);
+        let delta_value_abs = total_value.clone().switch(&delta_value_is_positive, &(-&total_value));
         let tx_turnover = delta_value_abs + &out_notes_sum;
         let turnover = tx_turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &tx_turnover));
 
