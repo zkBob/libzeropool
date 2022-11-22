@@ -1,4 +1,6 @@
 
+use fawkes_crypto::ff_uint::{NumRepr, Uint};
+
 use crate::{constants, 
     fawkes_crypto::{
         ff_uint::Num,
@@ -230,6 +232,67 @@ impl<P:PoolParams> State<P> {
         (p, s)
     }
 
+    pub fn sample_deterministic_state<R:Rng>(rng:&mut R, params:&P, amount: u64) -> Self {
+        let sigma = rng.gen();
+        let a = derive_key_a(sigma, params);
+        let eta = derive_key_eta(a.x, params);
+
+
+        let account_id = rng.gen_range(0, N_ITEMS);
+        let note_id = rand::seq::index::sample(rng, N_ITEMS, constants::IN).into_vec();
+
+
+        let mut items:Vec<(Account<_>, Note<_>)> = (0..N_ITEMS).map(|_| (Account::sample(rng, params), Note::sample(rng, params) )).collect();
+
+        for i in note_id.iter().cloned() {
+            items[i].1.p_d = derive_key_p_d(items[i].1.d.to_num(), eta, params).x;
+        }
+
+        items[account_id].0.p_d = derive_key_p_d(items[account_id].0.d.to_num(), eta, params).x;
+        items[account_id].0.i = BoundedNum::new(Num::ZERO);
+        items[account_id].0.b = BoundedNum::new(Num::from_uint_unchecked(NumRepr(Uint::from_u64(amount))));
+
+        let mut default_hashes = vec![Num::ZERO;constants::HEIGHT+1];
+        let mut hashes = vec![];
+
+        for i in 0..constants::HEIGHT {
+            let t = default_hashes[i];
+            default_hashes[i+1] = poseidon([t,t].as_ref(), params.compress());
+        }
+
+        {
+            let mut t = vec![];
+            for j in 0..N_ITEMS {
+                let (a, n) = items[j].clone();
+                t.push(a.hash(params));
+                t.push(n.hash(params));
+            }
+            if t.len() & 1 == 1 {
+                t.push(default_hashes[0]);
+            }
+            hashes.push(t);
+        }
+
+        for i in 0..constants::HEIGHT {
+            let mut t = vec![];
+            for j in 0..hashes[i].len()>>1 {
+                t.push(poseidon([hashes[i][2*j],hashes[i][2*j+1]].as_ref(), params.compress()));
+            }
+            if t.len() & 1 == 1 {
+                t.push(default_hashes[i+1]);
+            }
+            hashes.push(t);
+        }
+
+        Self {
+            hashes,
+            items,
+            default_hashes,
+            sigma,
+            account_id,
+            note_id
+        }
+    }
     fn cell(&self, i:usize, j:usize) -> Num<P::Fr> {
         if self.hashes[i].len() <= j {
             self.default_hashes[i]
