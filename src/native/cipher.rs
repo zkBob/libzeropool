@@ -11,13 +11,14 @@ use crate::{
         params::PoolParams,
         key::{derive_key_a, derive_key_p_d}
     },
-    constants
+    constants::{self, PREALLOC_DECRYPT_BUFFER_SIZE}
 };
 
 use sha3::{Digest, Keccak256};
 
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, aead::AeadMutInPlace};
 use chacha20poly1305::aead::{Aead, NewAead};
+use chacha20poly1305::aead::heapless::Vec as HeaplessVec;
 
 fn keccak256(data:&[u8])->[u8;constants::U256_SIZE] {
     let mut hasher = Keccak256::new();
@@ -36,15 +37,32 @@ fn symcipher_encode(key:&[u8], data:&[u8])->Vec<u8> {
 }
 
 //key stricly assumed to be unique for all messages. Using this function with multiple messages and one key is insecure!
-fn symcipher_decode(key:&[u8], data:&[u8])->Option<Vec<u8>> {
+fn symcipher_decode(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     assert!(key.len()==constants::U256_SIZE);
     let nonce = Nonce::from_slice(&constants::ENCRYPTION_NONCE);
     let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
     cipher.decrypt(nonce, data).ok()
-
 }
 
+//key stricly assumed to be unique for all messages. Using this function with multiple messages and one key is insecure!
+fn symcipher_decode_in_place(key: &[u8], ciphertext: &[u8]) -> Option<HeaplessVec<u8, PREALLOC_DECRYPT_BUFFER_SIZE>> {
+    assert!(key.len()==constants::U256_SIZE);
+    let nonce = Nonce::from_slice(&constants::ENCRYPTION_NONCE);
+    let mut cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+    let mut buffer = HeaplessVec::<u8, PREALLOC_DECRYPT_BUFFER_SIZE>::from_slice(ciphertext).ok()?;
+    cipher.decrypt_in_place(nonce, b"", &mut buffer).ok()?;
+    Some(buffer)
+}
 
+fn decrypt_note<P: PoolParams>(key: &[u8], ciphertext: &[u8]) -> Option<Note<P::Fr>> {
+    if ciphertext.len() <= PREALLOC_DECRYPT_BUFFER_SIZE {
+        let plain = symcipher_decode_in_place(key, ciphertext)?;
+        Some(Note::try_from_slice(&plain).ok()?)
+    } else {
+        let plain = symcipher_decode(key, ciphertext)?;
+        Some(Note::try_from_slice(&plain).ok()?)
+    }
+}
 
 pub fn encrypt<P: PoolParams>(
     entropy: &[u8],
@@ -159,8 +177,7 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let note = (0..nozero_notes_num).map(|i| {
         buf_take(&mut memo, num_size)?;
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
-        let text = symcipher_decode(&note_key[i], ciphertext)?;
-        let note = Note::try_from_slice(&text).ok()?;
+        let note = decrypt_note::<P>(&note_key[i], ciphertext)?;
         if note.hash(params) != note_hash[i] {
             None
         } else {
@@ -204,8 +221,7 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
         };
 
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
-        let text = symcipher_decode(&key, ciphertext)?;
-        let note = Note::try_from_slice(&text).ok()?;
+        let note = decrypt_note::<P>(&key, ciphertext)?;
         if note.hash(params) != note_hash[i] {
             None
         } else {

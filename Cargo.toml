@@ -17,13 +17,13 @@ name = "libzeropool-setup"
 required-features = ["cli_libzeropool_setup"] 
 
 [dependencies]
-fawkes-crypto = { git = "ssh://git@github.com/zkBob/fawkes-crypto.git", branch = "multicore-wasm", version = "4.3.3", features = ["rand_support"] }
+fawkes-crypto = { path = "../fawkes-crypto/fawkes-crypto", features = ["rand_support"] }
 
 sha3 = "0.9.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0"}
 lazy_static = "1.4.0"
-chacha20poly1305 = "0.8.0"
+chacha20poly1305 = { version = "0.8.0", features = ["heapless"] }
 clap={ package = "clap-v3", version = "3.0.0-beta.1", optional=true}
 convert_case = "0.4.0"
 
@@ -36,4 +36,4 @@ cli_libzeropool_setup = ["clap", "fawkes-crypto/rand_support", "fawkes-crypto/ba
 default=["cli_libzeropool_setup", "in3out127"]
 
 [dev-dependencies]
-fawkes-crypto = { git = "ssh://git@github.com/zkBob/fawkes-crypto.git", branch = "multicore-wasm", version = "4.3.3", features = ["rand_support", "backend_bellman_groth16"] }
+fawkes-crypto = { path = "../fawkes-crypto/fawkes-crypto", features = ["rand_support", "backend_bellman_groth16"] }
