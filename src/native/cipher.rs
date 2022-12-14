@@ -196,7 +196,12 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let note = (0..nozero_notes_num).map(|i| {
         let a_pub = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
         let ecdh = a_pub.mul(eta.to_other_reduced(), params.jubjub());
-        let key = keccak256(&ecdh.x.try_to_vec().unwrap());
+        
+        let key = {
+            let mut x: [u8; 32] = [0; 32];
+            ecdh.x.serialize(&mut &mut x[..]).unwrap();
+            keccak256(&x)
+        };
 
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
         let text = symcipher_decode(&key, ciphertext)?;
