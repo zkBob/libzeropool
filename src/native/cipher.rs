@@ -11,7 +11,7 @@ use crate::{
         params::PoolParams,
         key::{derive_key_a, derive_key_p_d}
     },
-    constants::{self, PREALLOC_DECRYPT_BUFFER_SIZE}
+    constants::{self}
 };
 
 use sha3::{Digest, Keccak256};
@@ -45,22 +45,49 @@ fn symcipher_decode(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
 }
 
 //key stricly assumed to be unique for all messages. Using this function with multiple messages and one key is insecure!
-fn symcipher_decode_in_place(key: &[u8], ciphertext: &[u8]) -> Option<HeaplessVec<u8, PREALLOC_DECRYPT_BUFFER_SIZE>> {
+fn symcipher_decode_in_place<const N: usize>(key: &[u8], ciphertext: &[u8]) -> Option<HeaplessVec<u8, N>> {
     assert!(key.len()==constants::U256_SIZE);
     let nonce = Nonce::from_slice(&constants::ENCRYPTION_NONCE);
     let mut cipher = ChaCha20Poly1305::new(Key::from_slice(key));
-    let mut buffer = HeaplessVec::<u8, PREALLOC_DECRYPT_BUFFER_SIZE>::from_slice(ciphertext).ok()?;
+    let mut buffer = HeaplessVec::<u8, N>::from_slice(ciphertext).ok()?;
     cipher.decrypt_in_place(nonce, b"", &mut buffer).ok()?;
     Some(buffer)
 }
 
 fn decrypt_note<P: PoolParams>(key: &[u8], ciphertext: &[u8]) -> Option<Note<P::Fr>> {
-    if ciphertext.len() <= PREALLOC_DECRYPT_BUFFER_SIZE {
-        let plain = symcipher_decode_in_place(key, ciphertext)?;
+    // 76 bytes is a note size for bls12-381, buffer needs 16-bytes overhead for auth tag
+    const NOTE_BUFFER_SIZE: usize = 76 + 16;
+    if ciphertext.len() <= NOTE_BUFFER_SIZE {
+        let plain = symcipher_decode_in_place::<NOTE_BUFFER_SIZE>(key, ciphertext)?;
         Some(Note::try_from_slice(&plain).ok()?)
     } else {
         let plain = symcipher_decode(key, ciphertext)?;
         Some(Note::try_from_slice(&plain).ok()?)
+    }
+}
+
+fn decrypt_account<P: PoolParams>(key: &[u8], ciphertext: &[u8]) -> Option<Account<P::Fr>> {
+    // 86 bytes is an account size for bls12-381, buffer needs 16-bytes overhead for auth tag
+    const ACCOUNT_BUFFER_SIZE: usize = 86 + 16;
+    if ciphertext.len() <= ACCOUNT_BUFFER_SIZE {
+        let plain = symcipher_decode_in_place::<ACCOUNT_BUFFER_SIZE>(key, ciphertext)?;
+        Some(Account::try_from_slice(&plain).ok()?)
+    } else {
+        let plain = symcipher_decode(key, ciphertext)?;
+        Some(Account::try_from_slice(&plain).ok()?)
+    }
+}
+
+fn decrypt_shared_secrets(key: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
+    // It's suitable for most transactions
+    const SHARED_SECRETS_BUFFER_SIZE: usize = 32 * 10 + 16;
+    if ciphertext.len() <= SHARED_SECRETS_BUFFER_SIZE {
+        let plain = symcipher_decode_in_place::<SHARED_SECRETS_BUFFER_SIZE>(key, ciphertext)?;
+        // It's still should be better in our case because it doesn't allocate memory when decryption failed
+        Some(plain.to_vec())
+    } else {
+        let plain = symcipher_decode(key, ciphertext)?;
+        Some(plain)
     }
 }
 
@@ -157,9 +184,13 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let shared_secret_text = {
         let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
         let ecdh = a_p.mul(eta.to_other_reduced(), params.jubjub());
-        let key = keccak256(&ecdh.x.try_to_vec().unwrap());
+        let key = {
+            let mut x: [u8; 32] = [0; 32];
+            ecdh.x.serialize(&mut &mut x[..]).unwrap();
+            keccak256(&x)
+        };
         let ciphertext = buf_take(&mut memo, shared_secret_ciphertext_size)?;
-        symcipher_decode(&key, ciphertext)?
+        decrypt_shared_secrets(&key, ciphertext)?
     };
     let mut shared_secret_text_ptr =&shared_secret_text[..];
 
@@ -167,8 +198,7 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let note_key = (0..nozero_notes_num).map(|_| <[u8;constants::U256_SIZE]>::deserialize(&mut shared_secret_text_ptr)).collect::<Result<Vec<_>,_>>().ok()?;
 
     let account_ciphertext = buf_take(&mut memo, account_size+constants::POLY_1305_TAG_SIZE)?;
-    let account_text = symcipher_decode(&account_key, account_ciphertext)?;
-    let account = Account::try_from_slice(&account_text).ok()?;
+    let account = decrypt_account::<P>(&account_key, account_ciphertext)?;
 
     if account.hash(params)!= account_hash {
         return None;
