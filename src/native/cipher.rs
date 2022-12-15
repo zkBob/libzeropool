@@ -179,7 +179,7 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
 
     let account_hash = Num::deserialize(&mut memo).ok()?;
-    let note_hash = (0..nozero_notes_num).map(|_| Num::deserialize(&mut memo)).collect::<Result<Vec<_>, _>>().ok()?;
+    let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     let shared_secret_text = {
         let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
@@ -208,7 +208,13 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
         buf_take(&mut memo, num_size)?;
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
         let note = decrypt_note::<P>(&note_key[i], ciphertext)?;
-        if note.hash(params) != note_hash[i] {
+
+        let note_hash = {
+            let note_hash = &mut &note_hashes[i * num_size..(i + 1) * num_size];
+            Num::deserialize(note_hash).ok()?
+        };
+
+        if note.hash(params) != note_hash {
             None
         } else {
             Some(note)
@@ -233,7 +239,7 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
 
     buf_take(&mut memo, num_size)?;
-    let note_hash = (0..nozero_notes_num).map(|_| Num::deserialize(&mut memo)).collect::<Result<Vec<_>, _>>().ok()?;
+    let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     buf_take(&mut memo, num_size)?;
     buf_take(&mut memo, shared_secret_ciphertext_size)?;
@@ -252,7 +258,13 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
 
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
         let note = decrypt_note::<P>(&key, ciphertext)?;
-        if note.hash(params) != note_hash[i] {
+
+        let note_hash = {
+            let note_hash = &mut &note_hashes[i * num_size..(i + 1) * num_size];
+            Num::deserialize(note_hash).ok()?
+        };
+        
+        if note.hash(params) != note_hash {
             None
         } else {
             Some(note)
