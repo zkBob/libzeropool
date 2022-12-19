@@ -352,13 +352,18 @@ impl<P:PoolParams> State<P> {
         &mut self, 
         rng: &mut R, 
         params: &P, 
-        amount: u64, 
+        deposit_amount: i64, 
         day: u64, 
         daily_limit: u64,
         transfer_limit: u64,
         out_note_min: u64,
     ) -> (TransferPub<P::Fr>, TransferSec<P::Fr>) {
-        let amount = Num::from_uint_unchecked(NumRepr(Uint::from_u64(amount)));
+        
+        let unsigned_amount =  Num::from_uint_unchecked(NumRepr(Uint::from_u64(deposit_amount.unsigned_abs())));
+        let mut amount = unsigned_amount;
+        if deposit_amount<0 {
+            amount = - unsigned_amount;
+        }
         let day = Num::from_uint_unchecked(NumRepr(Uint::from_u64(day)));
         let daily_limit = Num::from_uint_unchecked(NumRepr(Uint::from_u64(daily_limit)));
         let transfer_limit = Num::from_uint_unchecked(NumRepr(Uint::from_u64(transfer_limit)));
@@ -380,13 +385,14 @@ impl<P:PoolParams> State<P> {
         }
 
         let in_account = &self.items[self.account_id].0;
-        let mut today_turnover_used = amount;
+        let mut today_turnover_used = unsigned_amount;
         if &day == in_account.last_action_day.as_num() {
             today_turnover_used += in_account.daily_turnover.as_num();
         }
 
+        let out_account_balance = input_value + amount;
         let mut out_account: Account<P::Fr> = Account::sample(rng, params);
-        out_account.b = BoundedNum::new(input_value + amount);
+        out_account.b = BoundedNum::new(out_account_balance);
         out_account.e = BoundedNum::new(input_energy);
         out_account.i = BoundedNum::new(Num::from(index as u32));
         out_account.p_d = derive_key_p_d(out_account.d.to_num(), eta, params).x;

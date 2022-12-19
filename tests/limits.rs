@@ -1,4 +1,4 @@
-use fawkes_crypto::rand::Rng;
+use fawkes_crypto::{rand::Rng, ff_uint::NumRepr};
 use libzeropool::{POOL_PARAMS, circuit::tx::{CTransferPub, CTransferSec, c_transfer},
     fawkes_crypto::{
         circuit::cs::DebugCS, 
@@ -193,12 +193,33 @@ fn test_transfer_limit_1() {
     let mut state = State::sample_deterministic_state(&mut rng, &*POOL_PARAMS, 1000);
     transfer(&mut state, &mut rng, 1000, 1000, 100, 0, 0, false);
 }
+
+#[test]
+fn test_negative_deposit() {
+    let mut rng = thread_rng();
+    let mut state = State::sample_deterministic_state(&mut rng, &*POOL_PARAMS, 1000);
+    let deposit_amount = -1000 as i64;
+
+    let mut starting_balance = state.items[state.account_id].0.b.to_num();
+    for &i in state.note_id.iter() {
+        starting_balance+=state.items[i].1.b.to_num();
+    }
+
+    deposit(&mut state, &mut rng, deposit_amount, 3000, 1000, 0, 0, true);
+
+    let acc = state.items[state.account_id];
+
+    let delta = starting_balance - acc.0.b.to_num();
+
     
+    assert_eq!(delta.to_uint(), NumRepr::from(- deposit_amount as u64));
+
+}
 
 fn deposit<R: Rng>(
     state: &mut State<PoolBN256>, 
     rng: &mut R, 
-    amount: u64, 
+    amount: i64, 
     daily_limit: u64, 
     transfer_limit: u64, 
     day: u64, 
