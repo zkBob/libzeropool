@@ -17,7 +17,7 @@ name = "libzeropool-setup"
 required-features = ["cli_libzeropool_setup"] 
 
 [dependencies]
-fawkes-crypto = { git = "ssh://git@github.com/zkBob/fawkes-crypto.git", branch = "multicore-wasm", version = "4.3.3", features = ["rand_support"] }
+fawkes-crypto = { git = "ssh://git@github.com/zkBob/fawkes-crypto.git", branch = "multicore-wasm", version = "4.3.4", features = ["rand_support"] }
 
 sha3 = "0.9.1"
 serde = { version = "1.0", features = ["derive"] }
