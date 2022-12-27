@@ -8,10 +8,12 @@ use fawkes_crypto::{circuit::{
 }, ff_uint::PrimeFieldParams};
 use fawkes_crypto::core::{signal::Signal, sizedvec::SizedVec,};
 use fawkes_crypto::ff_uint::{Num, NumRepr};
-use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}};
+use crate::{circuit::{account::CAccount, note::CNote, key::{c_derive_key_eta, c_derive_key_p_d}}, constants::{DAY_SIZE_BITS, TURNOVER_SIZE_BITS}};
 use crate::native::tx::{TransferPub, TransferSec, Tx};
 use crate::native::params::PoolParams;
 use crate::constants::{HEIGHT, IN, OUT, BALANCE_SIZE_BITS, ENERGY_SIZE_BITS, POOLID_SIZE_BITS};
+
+use super::boundednum::CBoundedNum;
 
 
 #[derive(Clone, Signal)]
@@ -22,6 +24,10 @@ pub struct CTransferPub<C:CS> {
     pub out_commit: CNum<C>,
     pub delta: CNum<C>, // int64 token delta, int64 energy delta, uint32 blocknumber
     pub memo: CNum<C>,
+    pub day: CBoundedNum<C, { DAY_SIZE_BITS }>,
+    pub daily_limit: CBoundedNum<C, { TURNOVER_SIZE_BITS }>,
+    pub transfer_limit: CBoundedNum<C, { BALANCE_SIZE_BITS }>,
+    pub out_note_min: CBoundedNum<C, { BALANCE_SIZE_BITS }>,
 }
 
 #[derive(Clone, Signal)]
@@ -124,9 +130,7 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     
     
     //build input hashes
-    let in_account_hash = s.tx.input.0.hash(params);
     let in_note_hash = s.tx.input.1.iter().map(|n| n.hash(params)).collect::<Vec<_>>();
-    let in_hash = [[in_account_hash.clone()].as_ref(), in_note_hash.as_slice()].concat();
 
     //assert input notes are unique
     let mut t:CNum<C> = p.derive_const(&Num::ZERO);
@@ -144,14 +148,22 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     let out_note_hash = s.tx.output.1.iter().map(|e| e.hash(params)).collect::<Vec<_>>();
     let out_hash = [[out_account_hash].as_ref(), out_note_hash.as_slice()].concat();
 
-    //assert out notes are unique or zero
+    //assert out notes are unique or zero, check min value, compute out sum
+    let mut out_notes_sum: CNum<C> = p.derive_const(&Num::ZERO);
     let mut t:CNum<C> = p.derive_const(&Num::ZERO);
     let mut out_note_zero_num:CNum<C> = p.derive_const(&Num::ZERO);
     for i in 0..OUT {
-        out_note_zero_num+=s.tx.output.1[i].is_zero().as_num();
+        let out_note_is_zero = s.tx.output.1[i].is_zero();
+        let is_equal_or_greater_than_min = !c_comp(&p.out_note_min.as_num(), &s.tx.output.1[i].b.as_num(), BALANCE_SIZE_BITS);
+        
+        // Check output notes min value
+        (&out_note_is_zero | is_equal_or_greater_than_min).assert_const(&true);
+
+        out_note_zero_num += out_note_is_zero.as_num();
         for j in i+1..OUT {
             t+=(&out_note_hash[i]-&out_note_hash[j]).is_zero().as_num();
         }
+        out_notes_sum += s.tx.output.1[i].b.as_num();
     }
     t -= &out_note_zero_num*(&out_note_zero_num-Num::ONE)/Num::from(2u64);
     t.assert_zero();
@@ -175,14 +187,52 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
         (&s.tx.input.1[i].p_d - c_derive_key_p_d(&s.tx.input.1[i].d.as_num(), &eta_bits, params).x).assert_zero();
     }
 
+    // Check daily turnover limit and transfer limit
+    let in_account = &s.tx.input.0;
+    let out_account = &s.tx.output.0;
+    {
+        let is_new_day = c_comp(&p.day.as_num(), &in_account.last_action_day.as_num(), DAY_SIZE_BITS);
+
+        let delta_value_is_positive = c_comp(&total_value, &p.derive_const(&Num::ZERO), BALANCE_SIZE_BITS);
+        let delta_value_abs = total_value.clone().switch(&delta_value_is_positive, &(-&total_value));
+        let tx_turnover = delta_value_abs + &out_notes_sum;
+        let turnover = tx_turnover.switch(&is_new_day, &(in_account.daily_turnover.as_num() + &tx_turnover));
+
+        // Check transfer limit
+        c_comp(&out_notes_sum, &p.transfer_limit.as_num(), BALANCE_SIZE_BITS).assert_const(&false);
+        // Check that current day >= last_action_day
+        (&is_new_day | p.day.is_eq(&in_account.last_action_day)).assert_const(&true);
+        // Check turnover limit
+        c_comp(&turnover, &p.daily_limit.as_num(), TURNOVER_SIZE_BITS).assert_const(&false);    
+        // Check output account turnover
+        out_account.daily_turnover.as_num().is_eq(&turnover).assert_const(&true);
+        // Check output account last_action_day
+        out_account.last_action_day.as_num().is_eq(&p.day.as_num()).assert_const(&true);
+    }
+
+    //assuming input_pos_index <= current_index
+    let ref input_pos_index = c_from_bits_le(s.in_proof.0.path.as_slice());
+
+    // Check in_account_hash. If account is old, last_action_day and daily_turnover must be zero
+    let (in_account_hash, nullifier) = {
+        let in_account_hash_new = in_account.hash(params);
+        let in_account_hash_old = in_account.hash_old(params);
+
+        let nullifier_new = c_nullfifier(&in_account_hash_new, &eta, input_pos_index, params);
+        let nullifier_old = c_nullfifier(&in_account_hash_old, &eta, input_pos_index, params);
+
+        let is_old_account = nullifier_old.is_eq(&p.nullifier);
+        (!&is_old_account | (in_account.last_action_day.as_num() + in_account.daily_turnover.as_num()).is_zero()).assert_const(&true);
+
+        let in_account_hash = in_account_hash_old.switch(&is_old_account, &in_account_hash_new);
+        let nullifier = nullifier_old.switch(&is_old_account, &nullifier_new);
+        (in_account_hash, nullifier)
+    };
 
     //build merkle proofs and check nullifier
     {
-        //assuming input_pos_index <= current_index
-        let ref input_pos_index = c_from_bits_le(s.in_proof.0.path.as_slice());
-
         //check nullifier
-        (&p.nullifier - c_nullfifier(&in_account_hash, &eta, input_pos_index, params)).assert_zero();
+        (&p.nullifier - nullifier).assert_zero();
 
         let cur_root = c_poseidon_merkle_proof_root(&in_account_hash, &s.in_proof.0, params.compress());
         //assert root == cur_root || account.is_dummy()
@@ -221,7 +271,8 @@ pub fn c_transfer<C:CS, P:PoolParams<Fr=C::Fr>>(
     //bind msg_hash to the circuit
     (&p.memo + Num::ONE).assert_nonzero();
 
-    //build tx hash
+    //build tx 
+    let in_hash = [[in_account_hash].as_ref(), in_note_hash.as_slice()].concat();
     let tx_hash = c_tx_hash(&in_hash, &out_ch, params);
 
     //check signature
