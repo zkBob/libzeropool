@@ -16,7 +16,7 @@ pub const SALT_SIZE_BITS: usize = 80;
 pub const POOLID_SIZE_BITS: usize = 24;
 
 pub const POLY_1305_TAG_SIZE: usize = 16;
-pub const U256_SIZE:usize = 32;
+pub const U256_SIZE: usize = 32;
 
 pub fn num_size_bits<Fp:PrimeFieldParams+Sized>() -> usize {
     Fp::Inner::NUM_WORDS*Fp::Inner::WORD_BITS
@@ -33,3 +33,13 @@ pub fn account_size_bits<Fp:PrimeFieldParams>() -> usize {
 
 //fist 12 bytes from keccak256("ZeroPool")
 pub const ENCRYPTION_NONCE: [u8;12] = [0x5b, 0xbd, 0xff, 0xc6, 0xfe, 0x73, 0xc4, 0x60, 0xf1, 0xb2, 0xb8, 0x5d];
+
+/// Size of prealloced buffer for shared secrets decryption.
+/// It's enough for shared secrets with 10 or less keys.
+pub const SHARED_SECRETS_HEAPLESS_SIZE: usize = 32 * 10 + 16;
+/// Size of prealloced buffer for account decryption.
+/// 86 bytes is an account size for bls12-381, buffer needs 16-bytes overhead for auth tag.
+pub const ACCOUNT_HEAPLESS_SIZE: usize = 86 + 16;
+/// Size of prealloced buffer for note decryption.
+/// 76 bytes is a note size for bls12-381, buffer needs 16-bytes overhead for auth tag.
+pub const NOTE_HEAPLESS_SIZE: usize = 76 + 16;
