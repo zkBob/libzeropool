@@ -259,9 +259,9 @@ pub fn decrypt_in<P: PoolParams>(eta:Num<P::Fr>, memo:&[u8], params:&P)->Vec<Opt
     }
 }
 
-// get encrypted memo chunks with associated decryption keys (chunk: account or note)
-// returns vector of tupple (index, chunk, key)
-// indexes are zero-based and enumerated within current memo
+/// get encrypted memo chunks with associated decryption keys (chunk: account or note)
+/// returns vector of tupple (index, chunk, key)
+/// indexes are zero-based and enumerated within current memo
 pub fn symcipher_decryption_keys<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P) -> Option<Vec<(u64, Vec<u8>, Vec<u8>)>> {
     let num_size = constants::num_size_bits::<P::Fr>()/8;
     let account_size = constants::account_size_bits::<P::Fr>()/8;
