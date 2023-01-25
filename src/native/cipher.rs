@@ -141,7 +141,7 @@ fn buf_take<'a>(memo: &mut &'a[u8], size:usize) -> Option<&'a[u8]> {
     }
 }
 
-pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
+fn _decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P, compressed: bool)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
     let num_size = constants::num_size_bits::<P::Fr>()/8;
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
@@ -159,7 +159,14 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     let shared_secret_text = {
-        let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
+        let a_p = {
+            if compressed {
+                EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?
+            } else {
+                EdwardsPoint{ x: Num::deserialize(&mut memo).ok()?, y: Num::deserialize(&mut memo).ok()? }
+            }
+        };
+        
         let ecdh = a_p.mul(eta.to_other_reduced(), params.jubjub());
         let key = {
             let mut x: [u8; 32] = [0; 32];
@@ -184,6 +191,9 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
 
     let note = (0..nozero_notes_num).map(|i| {
         buf_take(&mut memo, num_size)?;
+        if !compressed {
+            buf_take(&mut memo, num_size)?;
+        }
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
         let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&note_key[i], ciphertext)?;
         let note = Note::try_from_slice(plain.as_slice()).ok()?;
@@ -203,7 +213,7 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     Some((account, note))
 }
 
-fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option<Vec<Option<Note<P::Fr>>>> {
+fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P, compressed: bool)->Option<Vec<Option<Note<P::Fr>>>> {
     let num_size = constants::num_size_bits::<P::Fr>()/8;
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
@@ -221,12 +231,21 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     buf_take(&mut memo, num_size)?;
+    if !compressed {
+        buf_take(&mut memo, num_size)?;
+    }
     buf_take(&mut memo, shared_secret_ciphertext_size)?;
     buf_take(&mut memo, account_size+constants::POLY_1305_TAG_SIZE)?;
 
 
     let note = (0..nozero_notes_num).map(|i| {
-        let a_pub = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
+        let a_pub = {
+            if compressed {
+                EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?
+            } else {
+                EdwardsPoint{ x: Num::deserialize(&mut memo).ok()?, y: Num::deserialize(&mut memo).ok()? }
+            }
+        };
         let ecdh = a_pub.mul(eta.to_other_reduced(), params.jubjub());
         
         let key = {
@@ -254,8 +273,24 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     Some(note)
 }
 
+pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, memo: &[u8], params:&P)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
+    _decrypt_out(eta, memo, params, true)
+}
+
+pub fn decrypt_out_decompressed<P: PoolParams>(eta:Num<P::Fr>, memo: &[u8], params:&P)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
+    _decrypt_out(eta, memo, params, false)
+}
+
 pub fn decrypt_in<P: PoolParams>(eta:Num<P::Fr>, memo:&[u8], params:&P)->Vec<Option<Note<P::Fr>>> {
-    if let Some(res) = _decrypt_in(eta, memo, params) {
+    if let Some(res) = _decrypt_in(eta, memo, params, true) {
+        res
+    } else {
+        vec![]
+    }
+}
+
+pub fn decrypt_in_decompressed<P: PoolParams>(eta:Num<P::Fr>, memo:&[u8], params:&P)->Vec<Option<Note<P::Fr>>> {
+    if let Some(res) = _decrypt_in(eta, memo, params, false) {
         res
     } else {
         vec![]
