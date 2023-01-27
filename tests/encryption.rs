@@ -28,7 +28,7 @@ fn test_encryption() {
 
     let ciphertext = cipher::encrypt(&(0..32).map(|_| rng.gen()).collect::<Vec<_>>(), sender_eta, account, &note, &*POOL_PARAMS);
 
-    let result_out = cipher::decrypt_out(sender_eta, &ciphertext, &*POOL_PARAMS);
+    let result_out = cipher::decrypt_out(sender_eta, &ciphertext, &*POOL_PARAMS, true);
 
     assert!(result_out.is_some(), "Could not decrypt outgoing data.");
         let (account_out, note_out) = result_out.unwrap();
@@ -37,7 +37,7 @@ fn test_encryption() {
         account == account_out, "Wrong outgoing data decrypted");
 
 
-    let result_out = cipher::decrypt_in(receiver_eta, &ciphertext, &*POOL_PARAMS);
+    let result_out = cipher::decrypt_in(receiver_eta, &ciphertext, &*POOL_PARAMS, true);
 
     assert!(result_out.len()==2 && result_out[0].is_some() && result_out[0].unwrap()==note[0] && result_out[1].is_none(), "Wrong incoming data decrypted");
 
