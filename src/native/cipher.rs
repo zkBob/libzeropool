@@ -332,19 +332,27 @@ pub fn symcipher_decryption_keys<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], 
 }
 
 pub fn decrypt_account<P: PoolParams>(symkey: &[u8], ciphertext: &[u8], hash: Num<P::Fr>, params: &P) -> Option<Account<P::Fr>> {
-    let plain = symcipher_decode::<ACCOUNT_HEAPLESS_SIZE>(&symkey, ciphertext)?;
-    match Account::try_from_slice(plain.as_slice()) {
-        Ok(acc) if acc.hash(params) == hash => Some(acc),
+    match decrypt_account_no_validate(symkey, ciphertext, params) {
+        Some(acc) if acc.hash(params) == hash => Some(acc),
         _ => None,
     }
 }
 
+pub fn decrypt_account_no_validate<P: PoolParams>(symkey: &[u8], ciphertext: &[u8], _: &P) -> Option<Account<P::Fr>> {
+    let plain = symcipher_decode::<ACCOUNT_HEAPLESS_SIZE>(&symkey, ciphertext)?;
+    Account::try_from_slice(plain.as_slice()).ok()
+}
+
 pub fn decrypt_note<P: PoolParams>(symkey: &[u8], ciphertext: &[u8], hash: Num<P::Fr>, params: &P) -> Option<Note<P::Fr>> {
-    let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&symkey, ciphertext)?;
-    match Note::try_from_slice(plain.as_slice()) {
-        Ok(note) if note.hash(params) == hash => Some(note),
+    match decrypt_note_no_validate(symkey, ciphertext, params) {
+        Some(note) if note.hash(params) == hash => Some(note),
         _ => None,
     }
+}
+
+pub fn decrypt_note_no_validate<P: PoolParams>(symkey: &[u8], ciphertext: &[u8], _: &P) -> Option<Note<P::Fr>> {
+    let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&symkey, ciphertext)?;
+    Note::try_from_slice(plain.as_slice()).ok()
 }
 
 #[cfg(test)]
