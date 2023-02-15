@@ -24,3 +24,4 @@ Cargo.lock
 **_proof.json
 **_key.json
 **_verifier.sol
+*.DS_Store
