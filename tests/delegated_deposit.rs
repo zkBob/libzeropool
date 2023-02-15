@@ -1,4 +1,4 @@
-use libzeropool::{POOL_PARAMS, 
+use libzeropool_zkbob::{POOL_PARAMS, 
     circuit::delegated_deposit::{CDelegatedDepositBatchPub, CDelegatedDepositBatchSec, check_delegated_deposit_batch, CDelegatedDeposit, num_to_iter_bits_be},
     native::note::Note,
     native::delegated_deposit::{DelegatedDeposit},
@@ -15,7 +15,7 @@ use libzeropool::{POOL_PARAMS,
 };
 
 use std::time::Instant;
-use libzeropool::fawkes_crypto::engines::bn256::Fr;
+use libzeropool_zkbob::fawkes_crypto::engines::bn256::Fr;
 
 
 

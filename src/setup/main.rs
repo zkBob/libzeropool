@@ -1,6 +1,6 @@
 mod evm_verifier;
 
-use libzeropool::{
+use libzeropool_zkbob::{
     POOL_PARAMS,
     circuit::tree::{tree_update, CTreePub, CTreeSec},
     circuit::tx::{c_transfer, CTransferPub, CTransferSec},
@@ -17,7 +17,7 @@ use fawkes_crypto::backend::bellman_groth16::{verifier::{VK, verify}, prover::{P
 use evm_verifier::generate_sol_data;
 use fawkes_crypto::circuit::cs::CS;
 use fawkes_crypto::rand::rngs::OsRng;
-use libzeropool::helpers::sample_data::{State, random_sample_tree_update, random_sample_delegated_deposit};
+use libzeropool_zkbob::helpers::sample_data::{State, random_sample_tree_update, random_sample_delegated_deposit};
 use convert_case::{Case, Casing};
 
 #[derive(Clap)]

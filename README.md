@@ -1,3 +1,12 @@
+# libzeropool-zkbob
+
+This is libzeropool core library adapted for (zkBob)[https://zkbob.com/] solution
+It was forked from (original ZeroPool repository)[https://github.com/zeropoolnetwork/libzeropool]
+This library published in crates.io with the title libzeropool-zkbob
+
+The undderlying dependency of this library: fawkes-crypto-zkbob
+This library used by: libzkbob-rs (core zkbob library)
+
 # libzeropool
 
 This is library with circuits and cryptography of ZeroPool. 

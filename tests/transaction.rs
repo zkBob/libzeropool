@@ -1,4 +1,4 @@
-use libzeropool::{POOL_PARAMS, circuit::tx::{CTransferPub, CTransferSec, c_transfer},
+use libzeropool_zkbob::{POOL_PARAMS, circuit::tx::{CTransferPub, CTransferSec, c_transfer},
     fawkes_crypto::{
         circuit::{
             cs::{CS, DebugCS}
@@ -14,11 +14,11 @@ use libzeropool::{POOL_PARAMS, circuit::tx::{CTransferPub, CTransferSec, c_trans
     }, 
 };
 
-use libzeropool::fawkes_crypto::engines::bn256::Fr;
+use libzeropool_zkbob::fawkes_crypto::engines::bn256::Fr;
 use std::time::Instant;
     
 
-use libzeropool::helpers::sample_data::State;
+use libzeropool_zkbob::helpers::sample_data::State;
 
 #[test]
 fn test_circuit_tx() {
