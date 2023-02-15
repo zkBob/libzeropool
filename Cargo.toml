@@ -29,7 +29,7 @@ convert_case = "0.4.0"
 
 [dependencies.fawkes-crypto]
 git = "https://github.com/zkBob/fawkes-crypto"
-branch = "fawkes-crypto-zkbob"
+branch = "master"
 package = "fawkes-crypto-zkbob"
 version = "4.5.0"
 features = ["rand_support"]
@@ -50,7 +50,7 @@ default=["cli_libzeropool_setup", "in3out127"]
 
 [dev-dependencies.fawkes-crypto]
 git = "https://github.com/zkBob/fawkes-crypto"
-branch = "fawkes-crypto-zkbob"
+branch = "master"
 package = "fawkes-crypto-zkbob"
 version = "4.5.0"
 features = ["rand_support", "backend_bellman_groth16"]
