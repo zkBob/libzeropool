@@ -1,14 +1,14 @@
-use libzeropool::POOL_PARAMS;
+use libzeropool_zkbob::POOL_PARAMS;
 
-use libzeropool::fawkes_crypto::rand::{thread_rng, Rng};
-use libzeropool::native::{
+use libzeropool_zkbob::fawkes_crypto::rand::{thread_rng, Rng};
+use libzeropool_zkbob::native::{
     note::Note,
     account::Account,
     key::{derive_key_p_d},
     cipher
 };
 
-use libzeropool::fawkes_crypto::engines::bn256::Fr;
+use libzeropool_zkbob::fawkes_crypto::engines::bn256::Fr;
 
 
 #[test]

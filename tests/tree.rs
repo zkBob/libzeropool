@@ -1,5 +1,5 @@
 use fawkes_crypto::rand::Rng;
-use libzeropool::{POOL_PARAMS, circuit::tree::{CTreePub, CTreeSec, tree_update},
+use libzeropool_zkbob::{POOL_PARAMS, circuit::tree::{CTreePub, CTreeSec, tree_update},
     native::tree::{TreePub, TreeSec},
     fawkes_crypto::{
         ff_uint::Num,
@@ -11,11 +11,8 @@ use libzeropool::{POOL_PARAMS, circuit::tree::{CTreePub, CTreeSec, tree_update},
     }, 
 };
 
-
 use std::time::Instant;
-    
-
-use libzeropool::helpers::sample_data::HashTreeState;
+use libzeropool_zkbob::helpers::sample_data::HashTreeState;
 
 
 #[test]
