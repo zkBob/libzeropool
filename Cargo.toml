@@ -1,10 +1,12 @@
 [package]
-name = "libzeropool"
-version = "0.5.6"
+name = "libzeropool-zkbob"
+version = "1.1.0"
 authors = ["Igor Gulamov <igor.gulamov@gmail.com>"]
+homepage = "https://github.com/zkbob/libzeropool"
+repository = "https://github.com/zkbob/libzeropool"
 edition = "2018"
 license = "MIT OR Apache-2.0"
-description = "zk-SNARK circuit and cryptography for ZeroPool"
+description = "zk-SNARK circuit and cryptography for zkBob"
 
 [lib]
 crate-type = ["rlib"]
@@ -17,16 +19,26 @@ name = "libzeropool-setup"
 required-features = ["cli_libzeropool_setup"] 
 
 [dependencies]
-fawkes-crypto = { version = "4.3.3", features = ["rand_support"] }
-
-
 sha3 = "0.9.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0"}
 lazy_static = "1.4.0"
-chacha20poly1305 = "0.8.0"
+chacha20poly1305 = { version = "0.8.0", features = ["heapless"] }
 clap={ package = "clap-v3", version = "3.0.0-beta.1", optional=true}
 convert_case = "0.4.0"
+
+[dependencies.fawkes-crypto]
+git = "https://github.com/zkBob/fawkes-crypto"
+branch = "master"
+package = "fawkes-crypto-zkbob"
+version = "4.5.0"
+features = ["rand_support"]
+
+[dependencies.fawkes-crypto-keccak256]
+git = "https://github.com/zkbob/keccak"
+branch = "master"
+package = "fawkes-crypto-zkbob-keccak256"
+version = "0.1.1"
 
 [features]
 in1out127=[]
@@ -36,5 +48,9 @@ in15out127=[]
 cli_libzeropool_setup = ["clap", "fawkes-crypto/rand_support", "fawkes-crypto/backend_bellman_groth16"]
 default=["cli_libzeropool_setup", "in3out127"]
 
-[dev-dependencies]
-fawkes-crypto = { version = "4.3.3", features = ["rand_support", "backend_bellman_groth16"] }
+[dev-dependencies.fawkes-crypto]
+git = "https://github.com/zkBob/fawkes-crypto"
+branch = "master"
+package = "fawkes-crypto-zkbob"
+version = "4.5.0"
+features = ["rand_support", "backend_bellman_groth16"]

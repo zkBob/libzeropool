@@ -11,13 +11,29 @@ use crate::{
         params::PoolParams,
         key::{derive_key_a, derive_key_p_d}
     },
-    constants
+    constants::{self, SHARED_SECRETS_HEAPLESS_SIZE, ACCOUNT_HEAPLESS_SIZE, NOTE_HEAPLESS_SIZE}
 };
 
 use sha3::{Digest, Keccak256};
 
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, aead::AeadMutInPlace};
 use chacha20poly1305::aead::{Aead, NewAead};
+use chacha20poly1305::aead::heapless::Vec as HeaplessVec;
+
+/// Wrapper for HeaplessVec (if buffer size is less or equals to N) or Vec otherwise
+enum Buffer<T, const N: usize> {
+    HeapBuffer(Vec<T>),
+    HeaplessBuffer(HeaplessVec<T, N>)
+}
+
+impl<T, const N: usize> Buffer<T, N> {
+    fn as_slice(&self) -> &[T] {
+        match self {
+            Self::HeapBuffer(vec) => vec.as_slice(),
+            Self::HeaplessBuffer(heapless_vec) => heapless_vec.as_slice()
+        }
+    }
+}
 
 fn keccak256(data:&[u8])->[u8;constants::U256_SIZE] {
     let mut hasher = Keccak256::new();
@@ -35,16 +51,22 @@ fn symcipher_encode(key:&[u8], data:&[u8])->Vec<u8> {
     cipher.encrypt(nonce, data.as_ref()).unwrap()
 }
 
-//key stricly assumed to be unique for all messages. Using this function with multiple messages and one key is insecure!
-fn symcipher_decode(key:&[u8], data:&[u8])->Option<Vec<u8>> {
+/// Decrypts message in place if `ciphertext.len()` is less or equals to N, otherwise allocates memory in heap.
+/// Key stricly assumed to be unique for all messages. Using this function with multiple messages and one key is insecure!
+fn symcipher_decode<const N: usize>(key: &[u8], ciphertext: &[u8]) -> Option<Buffer<u8, N>> {
     assert!(key.len()==constants::U256_SIZE);
     let nonce = Nonce::from_slice(&constants::ENCRYPTION_NONCE);
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
-    cipher.decrypt(nonce, data).ok()
+    let mut cipher = ChaCha20Poly1305::new(Key::from_slice(key));
 
+    if ciphertext.len() <= N {
+        let mut buffer = HeaplessVec::<u8, N>::from_slice(ciphertext).ok()?;
+        cipher.decrypt_in_place(nonce, b"", &mut buffer).ok()?;
+        Some(Buffer::HeaplessBuffer(buffer))
+    } else {
+        let plain = cipher.decrypt(nonce, ciphertext).ok()?;
+        Some(Buffer::HeapBuffer(plain))
+    }
 }
-
-
 
 pub fn encrypt<P: PoolParams>(
     entropy: &[u8],
@@ -134,23 +156,27 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
 
     let account_hash = Num::deserialize(&mut memo).ok()?;
-    let note_hash = (0..nozero_notes_num).map(|_| Num::deserialize(&mut memo)).collect::<Result<Vec<_>, _>>().ok()?;
+    let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     let shared_secret_text = {
         let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
         let ecdh = a_p.mul(eta.to_other_reduced(), params.jubjub());
-        let key = keccak256(&ecdh.x.try_to_vec().unwrap());
+        let key = {
+            let mut x: [u8; 32] = [0; 32];
+            ecdh.x.serialize(&mut &mut x[..]).unwrap();
+            keccak256(&x)
+        };
         let ciphertext = buf_take(&mut memo, shared_secret_ciphertext_size)?;
-        symcipher_decode(&key, ciphertext)?
+        symcipher_decode::<SHARED_SECRETS_HEAPLESS_SIZE>(&key, ciphertext)?
     };
-    let mut shared_secret_text_ptr =&shared_secret_text[..];
+    let mut shared_secret_text_ptr = shared_secret_text.as_slice();
 
     let account_key= <[u8;constants::U256_SIZE]>::deserialize(&mut shared_secret_text_ptr).ok()?;
     let note_key = (0..nozero_notes_num).map(|_| <[u8;constants::U256_SIZE]>::deserialize(&mut shared_secret_text_ptr)).collect::<Result<Vec<_>,_>>().ok()?;
 
     let account_ciphertext = buf_take(&mut memo, account_size+constants::POLY_1305_TAG_SIZE)?;
-    let account_text = symcipher_decode(&account_key, account_ciphertext)?;
-    let account = Account::try_from_slice(&account_text).ok()?;
+    let account_plain = symcipher_decode::<ACCOUNT_HEAPLESS_SIZE>(&account_key, account_ciphertext)?;
+    let account = Account::try_from_slice(account_plain.as_slice()).ok()?;
 
     if account.hash(params)!= account_hash {
         return None;
@@ -159,9 +185,15 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let note = (0..nozero_notes_num).map(|i| {
         buf_take(&mut memo, num_size)?;
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
-        let text = symcipher_decode(&note_key[i], ciphertext)?;
-        let note = Note::try_from_slice(&text).ok()?;
-        if note.hash(params) != note_hash[i] {
+        let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&note_key[i], ciphertext)?;
+        let note = Note::try_from_slice(plain.as_slice()).ok()?;
+
+        let note_hash = {
+            let note_hash = &mut &note_hashes[i * num_size..(i + 1) * num_size];
+            Num::deserialize(note_hash).ok()?
+        };
+
+        if note.hash(params) != note_hash {
             None
         } else {
             Some(note)
@@ -186,7 +218,7 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
 
     buf_take(&mut memo, num_size)?;
-    let note_hash = (0..nozero_notes_num).map(|_| Num::deserialize(&mut memo)).collect::<Result<Vec<_>, _>>().ok()?;
+    let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     buf_take(&mut memo, num_size)?;
     buf_take(&mut memo, shared_secret_ciphertext_size)?;
@@ -196,12 +228,23 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let note = (0..nozero_notes_num).map(|i| {
         let a_pub = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
         let ecdh = a_pub.mul(eta.to_other_reduced(), params.jubjub());
-        let key = keccak256(&ecdh.x.try_to_vec().unwrap());
+        
+        let key = {
+            let mut x: [u8; 32] = [0; 32];
+            ecdh.x.serialize(&mut &mut x[..]).unwrap();
+            keccak256(&x)
+        };
 
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
-        let text = symcipher_decode(&key, ciphertext)?;
-        let note = Note::try_from_slice(&text).ok()?;
-        if note.hash(params) != note_hash[i] {
+        let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&key, ciphertext)?;
+        let note = Note::try_from_slice(plain.as_slice()).ok()?;
+
+        let note_hash = {
+            let note_hash = &mut &note_hashes[i * num_size..(i + 1) * num_size];
+            Num::deserialize(note_hash).ok()?
+        };
+        
+        if note.hash(params) != note_hash {
             None
         } else {
             Some(note)
