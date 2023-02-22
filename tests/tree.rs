@@ -1,4 +1,4 @@
-use fawkes_crypto::rand::Rng;
+use fawkes_crypto::{rand::Rng, engines::bn256::Fr};
 use libzeropool_zkbob::{POOL_PARAMS, circuit::tree::{CTreePub, CTreeSec, tree_update},
     native::tree::{TreePub, TreeSec},
     fawkes_crypto::{

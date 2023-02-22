@@ -3,7 +3,7 @@ use crate::{fawkes_crypto::circuit::{
     num::CNum,
     bitify::{c_into_bits_le_strict, c_into_bits_le, c_from_bits_le},
     cs::{RCS, CS}
-}, POOL_PARAMS, helpers::sample_data::{State, random_sample_delegated_deposit}};
+}, POOL_PARAMS, helpers::sample_data::random_sample_delegated_deposit};
 use crate::fawkes_crypto::ff_uint::{PrimeFieldParams, Num};
 use crate::fawkes_crypto::core::{
     signal::Signal,
