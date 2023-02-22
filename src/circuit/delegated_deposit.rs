@@ -131,6 +131,7 @@ pub fn check_delegated_deposit_batch<C:CS, P:PoolParams<Fr=C::Fr>>(
 
 }
 
+#[test]
 fn load_params_and_prove() {
     fn circuit<C: CS<Fr = Fr>>(public: CDelegatedDepositBatchPub<C>, secret: CDelegatedDepositBatchSec<C>) {
         check_delegated_deposit_batch(&public, &secret, &*POOL_PARAMS);
