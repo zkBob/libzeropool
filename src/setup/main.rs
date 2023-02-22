@@ -223,9 +223,13 @@ fn cli_prove(o:ProveOpts) {
         "transfer" => {
             let (public, secret) = serde_json::from_str(&object_str).unwrap();
             let start = SystemTime::now();
+            for _ in 0..100 {
+                let start = SystemTime::now();
+                prove(&params, &public, &secret, tx_circuit);
+                let duration = start.elapsed().unwrap();
+                println!("it took {}", duration.as_millis());
+            };
             let r = prove(&params, &public, &secret, tx_circuit);
-            let duration = start.elapsed().unwrap();
-            println!("it took {}", duration.as_millis());
             r
         },
         "tree_update" => {
