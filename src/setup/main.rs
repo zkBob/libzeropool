@@ -8,7 +8,7 @@ use libzeropool_zkbob::{
     clap::Clap,
 };
 use core::panic;
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, time::SystemTime};
 
 use fawkes_crypto::engines::bn256::Fr;
 use fawkes_crypto::backend::bellman_groth16::engines::Bn256;
@@ -222,7 +222,11 @@ fn cli_prove(o:ProveOpts) {
     let (inputs, snark_proof) = match o.circuit.as_str() {
         "transfer" => {
             let (public, secret) = serde_json::from_str(&object_str).unwrap();
-            prove(&params, &public, &secret, tx_circuit)
+            let start = SystemTime::now();
+            let r = prove(&params, &public, &secret, tx_circuit);
+            let duration = start.elapsed().unwrap();
+            println!("it took {}", duration.as_millis());
+            r
         },
         "tree_update" => {
             let (public, secret) = serde_json::from_str(&object_str).unwrap();
