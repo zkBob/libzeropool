@@ -20,6 +20,8 @@ use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, aead::AeadMutInPlace};
 use chacha20poly1305::aead::{Aead, NewAead};
 use chacha20poly1305::aead::heapless::Vec as HeaplessVec;
 
+use super::ec_points::{ECPointsFormat, skip_ec_point, parse_ec_point, check_in_prime_subgroup};
+
 /// Wrapper for HeaplessVec (if buffer size is less or equals to N) or Vec otherwise
 enum Buffer<T, const N: usize> {
     HeapBuffer(Vec<T>),
@@ -130,22 +132,10 @@ pub fn encrypt<P: PoolParams>(
     res
 }
 
-
-fn buf_take<'a>(memo: &mut &'a[u8], size:usize) -> Option<&'a[u8]> {
-    if memo.len() < size {
-        None
-    } else {
-        let res = &memo[0..size];
-        *memo = &memo[size..];
-        Some(res)
-    }
-}
-
-pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
+pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo: &[u8], params: &P, ec_points_format: ECPointsFormat)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
     let num_size = constants::num_size_bits::<P::Fr>()/8;
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
-
 
     let nozero_items_num = u32::deserialize(&mut memo).ok()? as usize;
     if nozero_items_num == 0 {
@@ -159,7 +149,7 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
     let shared_secret_text = {
-        let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
+        let a_p = parse_ec_point(&mut memo, num_size, params, ec_points_format)?;
         let ecdh = a_p.mul(eta.to_other_reduced(), params.jubjub());
         let key = {
             let mut x: [u8; 32] = [0; 32];
@@ -167,7 +157,9 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
             keccak256(&x)
         };
         let ciphertext = buf_take(&mut memo, shared_secret_ciphertext_size)?;
-        symcipher_decode::<SHARED_SECRETS_HEAPLESS_SIZE>(&key, ciphertext)?
+        let shared_secret_text = symcipher_decode::<SHARED_SECRETS_HEAPLESS_SIZE>(&key, ciphertext)?;
+        check_in_prime_subgroup(a_p, params, ec_points_format)?;
+        shared_secret_text
     };
     let mut shared_secret_text_ptr = shared_secret_text.as_slice();
 
@@ -183,7 +175,8 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     }
 
     let note = (0..nozero_notes_num).map(|i| {
-        buf_take(&mut memo, num_size)?;
+        skip_ec_point(&mut memo, num_size, ec_points_format)?;
+
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
         let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&note_key[i], ciphertext)?;
         let note = Note::try_from_slice(plain.as_slice()).ok()?;
@@ -203,11 +196,10 @@ pub fn decrypt_out<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Op
     Some((account, note))
 }
 
-fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option<Vec<Option<Note<P::Fr>>>> {
+fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P, ec_points_format: ECPointsFormat)->Option<Vec<Option<Note<P::Fr>>>> {
     let num_size = constants::num_size_bits::<P::Fr>()/8;
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
-
 
     let nozero_items_num = u32::deserialize(&mut memo).ok()? as usize;
     if nozero_items_num == 0 {
@@ -220,13 +212,13 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     buf_take(&mut memo, num_size)?;
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
-    buf_take(&mut memo, num_size)?;
+    skip_ec_point(&mut memo, num_size, ec_points_format)?;
     buf_take(&mut memo, shared_secret_ciphertext_size)?;
     buf_take(&mut memo, account_size+constants::POLY_1305_TAG_SIZE)?;
 
 
     let note = (0..nozero_notes_num).map(|i| {
-        let a_pub = EdwardsPoint::subgroup_decompress(Num::deserialize(&mut memo).ok()?, params.jubjub())?;
+        let a_pub = parse_ec_point(&mut memo, num_size, params, ec_points_format)?;
         let ecdh = a_pub.mul(eta.to_other_reduced(), params.jubjub());
         
         let key = {
@@ -237,6 +229,8 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
 
         let ciphertext = buf_take(&mut memo, note_size+constants::POLY_1305_TAG_SIZE)?;
         let plain = symcipher_decode::<NOTE_HEAPLESS_SIZE>(&key, ciphertext)?;
+        check_in_prime_subgroup(a_pub, params, ec_points_format)?;
+
         let note = Note::try_from_slice(plain.as_slice()).ok()?;
 
         let note_hash = {
@@ -254,10 +248,20 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     Some(note)
 }
 
-pub fn decrypt_in<P: PoolParams>(eta:Num<P::Fr>, memo:&[u8], params:&P)->Vec<Option<Note<P::Fr>>> {
-    if let Some(res) = _decrypt_in(eta, memo, params) {
+pub fn decrypt_in<P: PoolParams>(eta: Num<P::Fr>, memo: &[u8], params: &P, ec_points_format: ECPointsFormat) -> Vec<Option<Note<P::Fr>>> {
+    if let Some(res) = _decrypt_in(eta, memo, params, ec_points_format) {
         res
     } else {
         vec![]
+    }
+}
+
+pub(crate) fn buf_take<'a>(memo: &mut &'a[u8], size:usize) -> Option<&'a[u8]> {
+    if memo.len() < size {
+        None
+    } else {
+        let res = &memo[0..size];
+        *memo = &memo[size..];
+        Some(res)
     }
 }

@@ -28,15 +28,13 @@ clap={ package = "clap-v3", version = "3.0.0-beta.1", optional=true}
 convert_case = "0.4.0"
 
 [dependencies.fawkes-crypto]
-git = "https://github.com/zkBob/fawkes-crypto"
-branch = "master"
 package = "fawkes-crypto-zkbob"
 version = "4.5.0"
 features = ["rand_support"]
 
 [dependencies.fawkes-crypto-keccak256]
 git = "https://github.com/zkbob/keccak"
-branch = "master"
+branch = "patch_test"
 package = "fawkes-crypto-zkbob-keccak256"
 version = "0.1.1"
 
@@ -49,8 +47,9 @@ cli_libzeropool_setup = ["clap", "fawkes-crypto/rand_support", "fawkes-crypto/ba
 default=["cli_libzeropool_setup", "in3out127"]
 
 [dev-dependencies.fawkes-crypto]
-git = "https://github.com/zkBob/fawkes-crypto"
-branch = "master"
 package = "fawkes-crypto-zkbob"
 version = "4.5.0"
 features = ["rand_support", "backend_bellman_groth16"]
+
+[patch.crates-io]
+fawkes-crypto-zkbob = {git = "https://github.com/zkBob/fawkes-crypto", branch = "feature/decompress_unchecked"}
