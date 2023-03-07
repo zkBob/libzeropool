@@ -16,3 +16,12 @@ Cargo.lock
 
 .vscode
 .idea/*
+
+#Generated data
+**_inputs.json
+**_object.json
+**_params.bin
+**_proof.json
+**_key.json
+**_verifier.sol
+*.DS_Store
