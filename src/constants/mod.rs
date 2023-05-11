@@ -18,6 +18,7 @@ pub const POOLID_SIZE_BITS: usize = 24;
 pub const DELEGATED_DEPOSITS_NUM:usize = 16;
 
 pub const POLY_1305_TAG_SIZE: usize = 16;
+pub const XCHACHA20_POLY1305_NONCE_SIZE: usize = 24;
 pub const U256_SIZE: usize = 32;
 
 pub fn num_size_bits<Fp:PrimeFieldParams+Sized>() -> usize {
