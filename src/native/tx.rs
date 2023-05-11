@@ -44,9 +44,12 @@ pub struct TransferSec<Fr:PrimeField> {
     pub eddsa_a: Num<Fr>,
 }
 
+pub fn nullifier_intermediate_hash<P:PoolParams>(account_hash: Num<P::Fr>, eta: Num<P::Fr>, path: Num<P::Fr>, params: &P) -> Num<P::Fr> {
+    poseidon(&[account_hash, eta, path], params.nullifier_intermediate())
+}
 
 pub fn nullifier<P:PoolParams>(account_hash: Num<P::Fr>, eta: Num<P::Fr>, path: Num<P::Fr>, params: &P) -> Num<P::Fr> {
-    let intermediate_hash = poseidon(&[account_hash, eta, path], params.nullifier_intermediate());
+    let intermediate_hash = nullifier_intermediate_hash(account_hash, eta, path, params);
     poseidon(&[account_hash, intermediate_hash], params.compress())
 }
 
