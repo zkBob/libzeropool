@@ -57,7 +57,6 @@ pub fn encrypt<P: PoolParams>(
 ) -> Vec<u8> {
     let nozero_notes_num = note.len();
     let nozero_items_num = nozero_notes_num+1;
-    let num_size = constants::num_size_bits::<P::Fr>()/8;
 
     let mut sb = SeedboxChaCha20::new_with_salt(entropy);
 
@@ -85,9 +84,7 @@ pub fn encrypt<P: PoolParams>(
         sb.fill_bytes(&mut nonce);
         let text:Vec<u8> = core::iter::once(&account_data.0[..]).chain(notes_data.iter().map(|e| &e.1[..])).collect::<Vec<_>>().concat();
         let ciphertext = encrypt_xchacha(kappa, &nonce, &text);
-        let mut padded_nonce = [0_u8; 32];
-        padded_nonce[(num_size - constants::XCHACHA20_POLY1305_NONCE_SIZE)..].copy_from_slice(&nonce);
-        (padded_nonce, ciphertext)
+        (nonce, ciphertext)
     };
 
     let mut res = vec![];
@@ -167,7 +164,6 @@ pub fn decrypt_out<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32], mut memo: &
 }
 
 fn decrypt_shared_secrets<P: PoolParams, const N: usize>(version: Version, eta: Num<P::Fr>, kappa: &[u8; 32], buf: &mut &[u8], size: usize, params: &P) -> Option<Buffer<u8, N>> {
-    let num_size = constants::num_size_bits::<P::Fr>()/8;
     match version {
         Version::Original => {
             let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(buf).ok()?, params.jubjub())?;
@@ -181,11 +177,26 @@ fn decrypt_shared_secrets<P: PoolParams, const N: usize>(version: Version, eta: 
             Some(decrypt_chacha_constant_nonce::<N>(&key, ciphertext)?)
         },
         Version::SymmetricEncryption => {
-            let nonce = &buf_take(buf, num_size)?[(num_size - constants::XCHACHA20_POLY1305_NONCE_SIZE)..];
+            let nonce = &buf_take(buf, constants::XCHACHA20_POLY1305_NONCE_SIZE)?;
             let ciphertext = buf_take(buf, size)?;
             Some(decrypt_xchacha::<N>(kappa, nonce, ciphertext)?)
         },
-        _ => None
+        Version::DelegatedDeposit => None
+    }
+}
+
+fn shared_secrets_size(version: Version, num_size: usize, items_num: usize) -> Option<usize> {
+    let shared_secret_ciphertext_size = items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
+    match version {
+        Version::Original => {
+            let ecdh_size = num_size;
+            Some(ecdh_size + shared_secret_ciphertext_size)
+        },
+        Version::SymmetricEncryption => {
+            let nonce_size = constants::XCHACHA20_POLY1305_NONCE_SIZE;
+            Some(nonce_size + shared_secret_ciphertext_size)
+        },
+        Version::DelegatedDeposit => None
     }
 }
 
@@ -200,16 +211,15 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
         return None;
     }
 
-    let _version = Version::from_u16(u16::deserialize(&mut memo).ok()?).ok()?;
+    let version = Version::from_u16(u16::deserialize(&mut memo).ok()?).ok()?;
 
     let nozero_notes_num = nozero_items_num - 1;
-    let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
 
     buf_take(&mut memo, num_size)?;
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
-    buf_take(&mut memo, num_size)?;
-    buf_take(&mut memo, shared_secret_ciphertext_size)?;
+    let shared_secrets_size = shared_secrets_size(version, num_size, nozero_items_num)?;
+    buf_take(&mut memo, shared_secrets_size)?;
     buf_take(&mut memo, account_size+constants::POLY_1305_TAG_SIZE)?;
 
 
