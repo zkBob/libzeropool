@@ -20,10 +20,10 @@ pub fn derive_key_eta<P:PoolParams>(a: Num<P::Fr>, params: &P) -> Num<P::Fr> {
     poseidon(&[a], params.hash())
 }
 
-// symmetric key
+// outgoing viewing key
 pub fn derive_key_kappa<Fr: PrimeField>(eta: Num<Fr>) -> [u8; 32] {
     let eta_bytes = eta.try_to_vec().expect("failed to serialize eta");
-    let suffix = "this is the suffix for zeropool symmetric encryption key".as_bytes();
+    let suffix = "this is the suffix for the symmetric encryption key".as_bytes();
     keccak256(&[&eta_bytes, suffix].concat())
 }
 

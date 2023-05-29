@@ -119,18 +119,21 @@ fn buf_take<'a>(memo: &mut &'a[u8], size:usize) -> Option<&'a[u8]> {
     }
 }
 
+pub fn parse_memo_header(memo: &mut &[u8]) -> Option<(usize, Version)> {
+    let nozero_items_num = u16::deserialize(memo).ok()? as usize;
+    if nozero_items_num == 0 {
+        return None;
+    }
+    let version = Version::from_u16(u16::deserialize(memo).ok()?).ok()?;
+    Some((nozero_items_num, version))
+}
+
 pub fn decrypt_out<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32], mut memo: &[u8], params: &P)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
     let num_size = constants::num_size_bits::<P::Fr>()/8;
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
 
-
-    let nozero_items_num = u16::deserialize(&mut memo).ok()? as usize;
-    if nozero_items_num == 0 {
-        return None;
-    }
-
-    let version = Version::from_u16(u16::deserialize(&mut memo).ok()?).ok()?;
+    let (nozero_items_num, version) = parse_memo_header(&mut memo)?;
 
     let nozero_notes_num = nozero_items_num - 1;
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
@@ -205,13 +208,7 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
 
-
-    let nozero_items_num = u16::deserialize(&mut memo).ok()? as usize;
-    if nozero_items_num == 0 {
-        return None;
-    }
-
-    let version = Version::from_u16(u16::deserialize(&mut memo).ok()?).ok()?;
+    let (nozero_items_num, version) = parse_memo_header(&mut memo)?;
 
     let nozero_notes_num = nozero_items_num - 1;
 
@@ -262,12 +259,7 @@ pub fn symcipher_decryption_keys<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
 
-    let nozero_items_num = u16::deserialize(&mut memo).ok()? as usize;
-    if nozero_items_num == 0 {
-        return None;
-    }
-
-    let version = Version::from_u16(u16::deserialize(&mut memo).ok()?).ok()?;
+    let (nozero_items_num, version) = parse_memo_header(&mut memo)?;
 
     let nozero_notes_num = nozero_items_num - 1;
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
