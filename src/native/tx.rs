@@ -50,7 +50,11 @@ pub fn nullifier_intermediate_hash<P:PoolParams>(account_hash: Num<P::Fr>, eta: 
 
 pub fn nullifier<P:PoolParams>(account_hash: Num<P::Fr>, eta: Num<P::Fr>, path: Num<P::Fr>, params: &P) -> Num<P::Fr> {
     let intermediate_hash = nullifier_intermediate_hash(account_hash, eta, path, params);
-    poseidon(&[account_hash, intermediate_hash], params.compress())
+    nullifier_outer_hash(account_hash, intermediate_hash, params)
+}
+
+pub fn nullifier_outer_hash<P:PoolParams>(account_hash: Num<P::Fr>, intermediate_nullifier_hash: Num<P::Fr>, params: &P) -> Num<P::Fr> {
+    poseidon(&[account_hash, intermediate_nullifier_hash], params.compress())
 }
 
 pub fn note_hash<P:PoolParams>(note: Note<P::Fr>, params: &P) -> Num<P::Fr> {
