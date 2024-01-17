@@ -19,30 +19,30 @@ use super::symmetric::{encrypt_chacha_constant_nonce, keccak256, decrypt_chacha_
 #[derive(Debug)]
 pub struct UnsupportedMemoVesion;
 
-/// The version of the memo
-pub enum Version {
-    /// The original version of the memo
-    Original,
-    /// The version of the memo with the delegated deposits related data
-    DelegatedDeposit,
-    /// The version of the memo without ECDH during shared secrets encryption
-    SymmetricEncryption
+/// The memo message encryption scheme
+pub enum MessageEncryptionType {
+    /// The original memo message encryption
+    ECDH,
+    /// The message using wihint the direct deposits contains plain text
+    Plain,
+    /// The latest memo message encryption without ECDH during shared secrets encryption
+    Symmetric,
 }
 
-impl Version {
+impl MessageEncryptionType {
     pub fn to_u16(&self) -> u16 {
         match self {
-            Self::Original => 0x0000,
-            Self::DelegatedDeposit => 0x0100,
-            Self::SymmetricEncryption => 0x0001,
+            Self::ECDH => 0x0000,
+            Self::Plain => 0x0100,
+            Self::Symmetric => 0x0200,
         }
     }
 
-    pub fn from_u16(version: u16) -> Result<Version, UnsupportedMemoVesion> {
-        match version {
-            0x0000 => Ok(Self::Original),
-            0x0100 => Ok(Self::DelegatedDeposit),
-            0x0001 => Ok(Self::SymmetricEncryption),
+    pub fn from_u16(enc_type: u16) -> Result<MessageEncryptionType, UnsupportedMemoVesion> {
+        match enc_type {
+            0x0000 => Ok(Self::ECDH),
+            0x0100 => Ok(Self::Plain),
+            0x0200 => Ok(Self::Symmetric),
             _ => Err(UnsupportedMemoVesion),
         }
     }
@@ -90,7 +90,7 @@ pub fn encrypt<P: PoolParams>(
     let mut res = vec![];
 
     (nozero_items_num as u16).serialize(&mut res).unwrap();
-    (Version::SymmetricEncryption.to_u16()).serialize(&mut res).unwrap();
+    (MessageEncryptionType::Symmetric.to_u16()).serialize(&mut res).unwrap();
     account.hash(params).serialize(&mut res).unwrap();
 
     for e in note.iter() {
@@ -119,13 +119,13 @@ fn buf_take<'a>(memo: &mut &'a[u8], size:usize) -> Option<&'a[u8]> {
     }
 }
 
-pub fn parse_memo_header(memo: &mut &[u8]) -> Option<(usize, Version)> {
+pub fn parse_memo_header(memo: &mut &[u8]) -> Option<(usize, MessageEncryptionType)> {
     let nozero_items_num = u16::deserialize(memo).ok()? as usize;
     if nozero_items_num == 0 {
         return None;
     }
-    let version = Version::from_u16(u16::deserialize(memo).ok()?).ok()?;
-    Some((nozero_items_num, version))
+    let enc_type = MessageEncryptionType::from_u16(u16::deserialize(memo).ok()?).ok()?;
+    Some((nozero_items_num, enc_type))
 }
 
 pub fn decrypt_out<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32], mut memo: &[u8], params: &P)->Option<(Account<P::Fr>, Vec<Note<P::Fr>>)> {
@@ -133,7 +133,7 @@ pub fn decrypt_out<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32], mut memo: &
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
 
-    let (nozero_items_num, version) = parse_memo_header(&mut memo)?;
+    let (nozero_items_num, enc_type) = parse_memo_header(&mut memo)?;
 
     let nozero_notes_num = nozero_items_num - 1;
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
@@ -141,7 +141,7 @@ pub fn decrypt_out<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32], mut memo: &
     let account_hash = Num::deserialize(&mut memo).ok()?;
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
-    let shared_secret_text = decrypt_shared_secrets::<P, SHARED_SECRETS_HEAPLESS_SIZE>(version, eta, kappa, &mut memo, shared_secret_ciphertext_size, params)?;
+    let shared_secret_text = decrypt_shared_secrets::<P, SHARED_SECRETS_HEAPLESS_SIZE>(enc_type, eta, kappa, &mut memo, shared_secret_ciphertext_size, params)?;
 
     let mut shared_secret_text_ptr = shared_secret_text.as_slice();
 
@@ -166,9 +166,9 @@ pub fn decrypt_out<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32], mut memo: &
     Some((account, note))
 }
 
-fn decrypt_shared_secrets<P: PoolParams, const N: usize>(version: Version, eta: Num<P::Fr>, kappa: &[u8; 32], buf: &mut &[u8], size: usize, params: &P) -> Option<Buffer<u8, N>> {
-    match version {
-        Version::Original => {
+fn decrypt_shared_secrets<P: PoolParams, const N: usize>(enc_type: MessageEncryptionType, eta: Num<P::Fr>, kappa: &[u8; 32], buf: &mut &[u8], size: usize, params: &P) -> Option<Buffer<u8, N>> {
+    match enc_type {
+        MessageEncryptionType::ECDH => {
             let a_p = EdwardsPoint::subgroup_decompress(Num::deserialize(buf).ok()?, params.jubjub())?;
             let ecdh = a_p.mul(eta.to_other_reduced(), params.jubjub());
             let key = {
@@ -179,27 +179,27 @@ fn decrypt_shared_secrets<P: PoolParams, const N: usize>(version: Version, eta: 
             let ciphertext = buf_take(buf, size)?;
             Some(decrypt_chacha_constant_nonce::<N>(&key, ciphertext)?)
         },
-        Version::SymmetricEncryption => {
+        MessageEncryptionType::Symmetric => {
             let nonce = &buf_take(buf, constants::XCHACHA20_POLY1305_NONCE_SIZE)?;
             let ciphertext = buf_take(buf, size)?;
             Some(decrypt_xchacha::<N>(kappa, nonce, ciphertext)?)
         },
-        Version::DelegatedDeposit => None
+        MessageEncryptionType::Plain => None
     }
 }
 
-fn shared_secrets_size(version: Version, num_size: usize, items_num: usize) -> Option<usize> {
+fn shared_secrets_size(enc_type: MessageEncryptionType, num_size: usize, items_num: usize) -> Option<usize> {
     let shared_secret_ciphertext_size = items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
-    match version {
-        Version::Original => {
+    match enc_type {
+        MessageEncryptionType::ECDH => {
             let ecdh_size = num_size;
             Some(ecdh_size + shared_secret_ciphertext_size)
         },
-        Version::SymmetricEncryption => {
+        MessageEncryptionType::Symmetric => {
             let nonce_size = constants::XCHACHA20_POLY1305_NONCE_SIZE;
             Some(nonce_size + shared_secret_ciphertext_size)
         },
-        Version::DelegatedDeposit => None
+        MessageEncryptionType::Plain => None
     }
 }
 
@@ -208,14 +208,14 @@ fn _decrypt_in<P: PoolParams>(eta:Num<P::Fr>, mut memo:&[u8], params:&P)->Option
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
 
-    let (nozero_items_num, version) = parse_memo_header(&mut memo)?;
+    let (nozero_items_num, enc_type) = parse_memo_header(&mut memo)?;
 
     let nozero_notes_num = nozero_items_num - 1;
 
     buf_take(&mut memo, num_size)?;
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
-    let shared_secrets_size = shared_secrets_size(version, num_size, nozero_items_num)?;
+    let shared_secrets_size = shared_secrets_size(enc_type, num_size, nozero_items_num)?;
     buf_take(&mut memo, shared_secrets_size)?;
     buf_take(&mut memo, account_size+constants::POLY_1305_TAG_SIZE)?;
 
@@ -259,7 +259,7 @@ pub fn symcipher_decryption_keys<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32
     let account_size = constants::account_size_bits::<P::Fr>()/8;
     let note_size = constants::note_size_bits::<P::Fr>()/8;
 
-    let (nozero_items_num, version) = parse_memo_header(&mut memo)?;
+    let (nozero_items_num, enc_type) = parse_memo_header(&mut memo)?;
 
     let nozero_notes_num = nozero_items_num - 1;
     let shared_secret_ciphertext_size = nozero_items_num * constants::U256_SIZE + constants::POLY_1305_TAG_SIZE;
@@ -267,7 +267,7 @@ pub fn symcipher_decryption_keys<P: PoolParams>(eta: Num<P::Fr>, kappa: &[u8; 32
     let account_hash = Num::deserialize(&mut memo).ok()?;
     let note_hashes = buf_take(&mut memo, nozero_notes_num * num_size)?;
 
-    let shared_secret_text = decrypt_shared_secrets::<P, SHARED_SECRETS_HEAPLESS_SIZE>(version, eta, kappa, &mut memo, shared_secret_ciphertext_size, params);
+    let shared_secret_text = decrypt_shared_secrets::<P, SHARED_SECRETS_HEAPLESS_SIZE>(enc_type, eta, kappa, &mut memo, shared_secret_ciphertext_size, params);
 
     if let Some(shared_secret_text) = shared_secret_text {
         // here is a our transaction, we can restore account and all notes
@@ -430,7 +430,7 @@ mod tests {
     use fawkes_crypto::rand::rngs::OsRng;
     use crate::native::key::{derive_key_a, derive_key_eta, derive_key_p_d, derive_key_kappa};
 
-    use super::{_encrypt_old, decrypt_out, decrypt_in, Version};
+    use super::{_encrypt_old, decrypt_out, decrypt_in, MessageEncryptionType};
 
     #[test_case(0)]
     #[test_case(1)]
@@ -467,25 +467,25 @@ mod tests {
         assert_eq!(plaintext.as_slice(), decrypted.as_slice());
     }
 
-    #[test_case(0, 0.0, Version::Original)]
-    #[test_case(1, 0.0, Version::Original)]
-    #[test_case(1, 1.0, Version::Original)]
-    #[test_case(5, 0.8, Version::Original)]
-    #[test_case(15, 0.0, Version::Original)]
-    #[test_case(15, 1.0, Version::Original)]
-    #[test_case(20, 0.5, Version::Original)]
-    #[test_case(30, 0.7, Version::Original)]
-    #[test_case(42, 0.5, Version::Original)]
-    #[test_case(0, 0.0, Version::SymmetricEncryption)]
-    #[test_case(1, 0.0, Version::SymmetricEncryption)]
-    #[test_case(1, 1.0, Version::SymmetricEncryption)]
-    #[test_case(5, 0.8, Version::SymmetricEncryption)]
-    #[test_case(15, 0.0, Version::SymmetricEncryption)]
-    #[test_case(15, 1.0, Version::SymmetricEncryption)]
-    #[test_case(20, 0.5, Version::SymmetricEncryption)]
-    #[test_case(30, 0.7, Version::SymmetricEncryption)]
-    #[test_case(42, 0.5, Version::SymmetricEncryption)]
-    fn test_decrypt_in_out(notes_count: u32, note_probability: f64, version: Version) {
+    #[test_case(0, 0.0, MessageEncryptionType::ECDH)]
+    #[test_case(1, 0.0, MessageEncryptionType::ECDH)]
+    #[test_case(1, 1.0, MessageEncryptionType::ECDH)]
+    #[test_case(5, 0.8, MessageEncryptionType::ECDH)]
+    #[test_case(15, 0.0, MessageEncryptionType::ECDH)]
+    #[test_case(15, 1.0, MessageEncryptionType::ECDH)]
+    #[test_case(20, 0.5, MessageEncryptionType::ECDH)]
+    #[test_case(30, 0.7, MessageEncryptionType::ECDH)]
+    #[test_case(42, 0.5, MessageEncryptionType::ECDH)]
+    #[test_case(0, 0.0, MessageEncryptionType::Symmetric)]
+    #[test_case(1, 0.0, MessageEncryptionType::Symmetric)]
+    #[test_case(1, 1.0, MessageEncryptionType::Symmetric)]
+    #[test_case(5, 0.8, MessageEncryptionType::Symmetric)]
+    #[test_case(15, 0.0, MessageEncryptionType::Symmetric)]
+    #[test_case(15, 1.0, MessageEncryptionType::Symmetric)]
+    #[test_case(20, 0.5, MessageEncryptionType::Symmetric)]
+    #[test_case(30, 0.7, MessageEncryptionType::Symmetric)]
+    #[test_case(42, 0.5, MessageEncryptionType::Symmetric)]
+    fn test_decrypt_in_out(notes_count: u32, note_probability: f64, enc_type: MessageEncryptionType) {
         let params = &POOL_PARAMS.clone();
         let mut rng = OsRng::default();
 
@@ -522,10 +522,10 @@ mod tests {
 
         // encrypt account and notes with the sender key
         let entropy: [u8; 32] = rng.gen();
-        let mut encrypted = match version {
-            Version::Original => _encrypt_old(&entropy, eta1, account, notes.as_slice(), params),
-            Version::SymmetricEncryption => encrypt(&entropy, &kappa1, account, notes.as_slice(), params),
-            Version::DelegatedDeposit => unreachable!()
+        let mut encrypted = match enc_type {
+            MessageEncryptionType::ECDH => _encrypt_old(&entropy, eta1, account, notes.as_slice(), params),
+            MessageEncryptionType::Symmetric => encrypt(&entropy, &kappa1, account, notes.as_slice(), params),
+            MessageEncryptionType::Plain => unreachable!()
         };  
 
         // let's decrypt the memo from the receiver side and check the result
@@ -559,23 +559,23 @@ mod tests {
         });
     }
 
-    #[test_case(0, 0.0, Version::Original)]
-    #[test_case(1, 0.0, Version::Original)]
-    #[test_case(1, 1.0, Version::Original)]
-    #[test_case(3, 0.5, Version::Original)]
-    #[test_case(10, 0.5, Version::Original)]
-    #[test_case(15, 0.0, Version::Original)]
-    #[test_case(30, 1.0, Version::Original)]
-    #[test_case(42, 0.5, Version::Original)]
-    #[test_case(0, 0.0, Version::SymmetricEncryption)]
-    #[test_case(1, 0.0, Version::SymmetricEncryption)]
-    #[test_case(1, 1.0, Version::SymmetricEncryption)]
-    #[test_case(3, 0.5, Version::SymmetricEncryption)]
-    #[test_case(10, 0.5, Version::SymmetricEncryption)]
-    #[test_case(15, 0.0, Version::SymmetricEncryption)]
-    #[test_case(30, 1.0, Version::SymmetricEncryption)]
-    #[test_case(42, 0.5, Version::SymmetricEncryption)]
-    fn test_compliance(notes_count: u32, note_probability: f64, version: Version) {
+    #[test_case(0, 0.0, MessageEncryptionType::ECDH)]
+    #[test_case(1, 0.0, MessageEncryptionType::ECDH)]
+    #[test_case(1, 1.0, MessageEncryptionType::ECDH)]
+    #[test_case(3, 0.5, MessageEncryptionType::ECDH)]
+    #[test_case(10, 0.5, MessageEncryptionType::ECDH)]
+    #[test_case(15, 0.0, MessageEncryptionType::ECDH)]
+    #[test_case(30, 1.0, MessageEncryptionType::ECDH)]
+    #[test_case(42, 0.5, MessageEncryptionType::ECDH)]
+    #[test_case(0, 0.0, MessageEncryptionType::Symmetric)]
+    #[test_case(1, 0.0, MessageEncryptionType::Symmetric)]
+    #[test_case(1, 1.0, MessageEncryptionType::Symmetric)]
+    #[test_case(3, 0.5, MessageEncryptionType::Symmetric)]
+    #[test_case(10, 0.5, MessageEncryptionType::Symmetric)]
+    #[test_case(15, 0.0, MessageEncryptionType::Symmetric)]
+    #[test_case(30, 1.0, MessageEncryptionType::Symmetric)]
+    #[test_case(42, 0.5, MessageEncryptionType::Symmetric)]
+    fn test_compliance(notes_count: u32, note_probability: f64, enc_type: MessageEncryptionType) {
         let params = &POOL_PARAMS.clone();
         let mut rng = OsRng::default();
 
@@ -614,10 +614,10 @@ mod tests {
 
         // encrypt account and notes with the sender key
         let entropy: [u8; 32] = rng.gen();
-        let encrypted = match version {
-            Version::Original => _encrypt_old(&entropy, eta1, account, notes.as_slice(), params),
-            Version::SymmetricEncryption => encrypt(&entropy, &kappa1, account, notes.as_slice(), params),
-            Version::DelegatedDeposit => unreachable!()
+        let encrypted = match enc_type {
+            MessageEncryptionType::ECDH => _encrypt_old(&entropy, eta1, account, notes.as_slice(), params),
+            MessageEncryptionType::Symmetric => encrypt(&entropy, &kappa1, account, notes.as_slice(), params),
+            MessageEncryptionType::Plain => unreachable!()
         };  
 
         // trying to restore chunks and associated decryption keys from the sender side
