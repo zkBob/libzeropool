@@ -17,7 +17,7 @@ use crate::{
 use super::symmetric::{encrypt_chacha_constant_nonce, keccak256, decrypt_chacha_constant_nonce, Buffer, encrypt_xchacha, decrypt_xchacha};
 
 #[derive(Debug)]
-pub struct UnsupportedMemoVesion;
+pub struct UnsupportedEncryption;
 
 /// The memo message encryption scheme
 pub enum MessageEncryptionType {
@@ -38,12 +38,12 @@ impl MessageEncryptionType {
         }
     }
 
-    pub fn from_u16(enc_type: u16) -> Result<MessageEncryptionType, UnsupportedMemoVesion> {
+    pub fn from_u16(enc_type: u16) -> Result<MessageEncryptionType, UnsupportedEncryption> {
         match enc_type {
             0x0000 => Ok(Self::ECDH),
             0x0100 => Ok(Self::Plain),
             0x0200 => Ok(Self::Symmetric),
-            _ => Err(UnsupportedMemoVesion),
+            _ => Err(UnsupportedEncryption),
         }
     }
 }
@@ -354,8 +354,8 @@ pub fn decrypt_note_no_validate<P: PoolParams>(symkey: &[u8], ciphertext: &[u8],
     Note::try_from_slice(plain.as_slice()).ok()
 }
 
-/// Deprecated
-fn _encrypt_old<P: PoolParams>(
+/// Deprecated but still in use on the old pools
+pub fn _encrypt_old<P: PoolParams>(
     entropy: &[u8],
     eta:Num<P::Fr>,
     account: Account<P::Fr>,
