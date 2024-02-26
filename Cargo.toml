@@ -1,6 +1,6 @@
 [package]
 name = "libzeropool-zkbob"
-version = "1.3.0"
+version = "1.5.0"
 authors = ["Igor Gulamov <igor.gulamov@gmail.com>"]
 homepage = "https://github.com/zkbob/libzeropool"
 repository = "https://github.com/zkbob/libzeropool"
@@ -31,7 +31,7 @@ convert_case = "0.4.0"
 git = "https://github.com/zkBob/fawkes-crypto"
 branch = "master"
 package = "fawkes-crypto-zkbob"
-version = "4.6.0"
+version = "4.7.0"
 features = ["rand_support"]
 
 [dependencies.fawkes-crypto-keccak256]
@@ -55,5 +55,5 @@ test-case = "2.2.2"
 git = "https://github.com/zkBob/fawkes-crypto"
 branch = "master"
 package = "fawkes-crypto-zkbob"
-version = "4.6.0"
+version = "4.7.0"
 features = ["rand_support", "backend_bellman_groth16"]
